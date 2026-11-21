@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import async_session, User, Tariff, Order, RtuSlot
 from app.services import (
-    register_user_and_car, create_order, validate_promo_code,
+    register_user_and_car, create_order, validate_promo_code, parse_tariff_ids,
     get_app_settings, mark_order_paid_by_user, confirm_order, reject_order,
     queue_open_gate, get_finance_stats
 )

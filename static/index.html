@@ -84,7 +84,7 @@
 
     .field { margin-bottom: 10px; }
     label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
-    input, textarea {
+    input, textarea, select {
       width: 100%; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: 10px;
       background: var(--card-elev); color: var(--text); font-size: 16px; outline: none; font-family: inherit;
       transition: border-color 0.15s, box-shadow 0.15s;
@@ -168,6 +168,9 @@
     .st-paid_by_user { background: var(--accent-soft); color: var(--accent); }
     .st-error, .st-rejected { background: var(--danger-soft); color: var(--danger); }
     .inline-inp { padding: 5px 8px; font-size: 13px; border-radius: 8px; }
+    .chk-wrap { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; align-items: center; }
+    .chk-lbl { display: inline-flex; align-items: center; gap: 4px; background: var(--card-elev); border: 1px solid var(--border); padding: 3px 7px; border-radius: 7px; cursor: pointer; margin: 0; color: var(--text); }
+    .chk-lbl input { width: auto; margin: 0; padding: 0; }
     .bar-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
     .bar-row input { width: auto; font-size: 13px; padding: 7px 10px; }
     .qr-grid { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
@@ -478,7 +481,8 @@
       const msg = document.getElementById('promo-msg');
       const code = inp.value.trim();
       if (!code) { activePromo = null; msg.textContent = ''; renderClientTariffs(); return; }
-      const r = await fetch('/api/promo/' + encodeURIComponent(code));
+      const ph = document.getElementById('reg-phone').value.trim();
+      const r = await fetch('/api/promo/' + encodeURIComponent(code) + (ph ? '?phone=' + encodeURIComponent(ph) : ''));
       const d = await r.json();
       if (r.ok) {
         activePromo = d;
@@ -630,7 +634,7 @@
         fetch('/api/admin/promos', {headers}),
         fetch('/api/admin/users', {headers}),
         fetch('/api/admin/queue', {headers}),
-        fetch('/api/tariffs'),
+        fetch('/api/admin/tariffs', {headers}),
       ]);
       if (!uRes.ok) { document.getElementById('adm-err').textContent = 'Неверный пароль'; return; }
       localStorage.setItem('adm_pass', pass);
@@ -815,17 +819,44 @@
       loadAdmin();
     }
 
-    async function saveTariff(id, isNight) {
+    async function createTariff() {
+      const name = document.getElementById('new-t-name').value.trim();
+      if (!name) return;
+      await fetch('/api/admin/tariffs', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          name,
+          description: document.getElementById('new-t-desc').value.trim(),
+          price: parseInt(document.getElementById('new-t-price').value, 10) || 0,
+          days: parseInt(document.getElementById('new-t-days').value, 10) || 1,
+          is_night: document.getElementById('new-t-night').checked,
+          is_active: true,
+        }),
+      });
+      document.getElementById('new-t-name').value = '';
+      document.getElementById('new-t-desc').value = '';
+      document.getElementById('new-t-price').value = '';
+      loadAdmin();
+    }
+
+    async function saveTariff(id) {
       await fetch(`/api/admin/tariffs/${id}`, {
         method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
         body: JSON.stringify({
-          name: document.getElementById(`tn-${id}`).value,
-          price: parseInt(document.getElementById(`tp-${id}`).value, 10),
-          days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
-          is_night: isNight,
+          name: document.getElementById(`tn-${id}`).value.trim(),
           description: document.getElementById(`tdesc-${id}`).value.trim(),
+          price: parseInt(document.getElementById(`tp-${id}`).value, 10) || 0,
+          days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
+          is_night: document.getElementById(`tnight-${id}`).checked,
+          is_active: document.getElementById(`tact-${id}`).checked,
         }),
       });
+      loadAdmin();
+    }
+
+    async function deleteTariff(id) {
+      if (!confirm('??????? ?????? (???? ?? ???? ??? ???? ??????, ?? ?????? ??????????)')) return;
+      await fetch(`/api/admin/tariffs/${id}`, {method: 'DELETE', headers: {'X-Admin-Password': getAdminPass()}});
       loadAdmin();
     }
 

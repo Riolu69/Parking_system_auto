@@ -42,6 +42,8 @@ class PromoCode(Base):
     code = Column(String(50), unique=True, nullable=False, index=True)
     discount_percent = Column(Integer, nullable=False)
     valid_until = Column(DateTime, nullable=True)
+    target_audience = Column(String(20), default="all", nullable=False)
+    tariff_ids = Column(String(255), default="", nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -95,6 +97,8 @@ class RtuSlot(Base):
     slot_number = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     valid_until = Column(DateTime, nullable=True)
+    target_audience = Column(String(20), default="all", nullable=False)
+    tariff_ids = Column(String(255), default="", nullable=False)
     status = Column(String(20), default="free")
     notified_expiring = Column(Boolean, default=False)
 
@@ -135,9 +139,14 @@ DEFAULT_SETTINGS = {
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(tariffs)"))).fetchall()]
-        if "description" not in cols:
+        t_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(tariffs)"))).fetchall()]
+        if "description" not in t_cols:
             await conn.execute(text("ALTER TABLE tariffs ADD COLUMN description TEXT DEFAULT ''"))
+        p_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(promo_codes)"))).fetchall()]
+        if "target_audience" not in p_cols:
+            await conn.execute(text("ALTER TABLE promo_codes ADD COLUMN target_audience VARCHAR(20) DEFAULT 'all'"))
+        if "tariff_ids" not in p_cols:
+            await conn.execute(text("ALTER TABLE promo_codes ADD COLUMN tariff_ids VARCHAR(255) DEFAULT ''"))
 
     async with async_session() as session:
         if (await session.execute(select(RtuSlot.slot_number).limit(1))).scalar() is None:

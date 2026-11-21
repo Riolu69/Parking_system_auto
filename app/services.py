@@ -1,4 +1,4 @@
-﻿import re
+import re
 from datetime import datetime, timedelta
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -123,7 +123,7 @@ async def create_order(
     applied_code = None
     if promo_code and promo_code.strip():
         try:
-            promo = await validate_promo_code(session, promo_code)
+            promo = await validate_promo_code(session, promo_code, user_id=user_id, tariff_id=tariff_id)
             discount = promo.discount_percent
             applied_code = promo.code
         except ValueError:

@@ -18,7 +18,7 @@ from app.database import init_db, async_session, User, SmsQueue, Tariff, Order, 
 from app.services import (
     normalize_phone, register_user_and_car, create_order, confirm_order, reject_order,
     grant_access_days, revoke_access, get_next_sms_task, report_sms_task,
-    validate_promo_code, get_app_settings, set_app_settings, mark_order_paid_by_user,
+    validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings, mark_order_paid_by_user,
     process_expired_slots, pop_expiring_slots, queue_open_gate, get_finance_stats
 )
 from app.bot import (
@@ -130,12 +130,17 @@ class SettingsReq(BaseModel):
     bot_username: str = ""
 
 
-class TariffUpdateReq(BaseModel):
+class TariffCreateReq(BaseModel):
     name: str
     price: int
-    days: int
+    days: int = 1
     is_night: bool = False
+    is_active: bool = True
     description: str = ""
+
+
+class TariffUpdateReq(TariffCreateReq):
+    pass
 
 
 class SupportReq(BaseModel):
@@ -149,6 +154,8 @@ class PromoReq(BaseModel):
     code: str
     discount_percent: int
     valid_until: str | None = None
+    target_audience: str = "all"
+    tariff_ids: list[int] = []
 
 
 class GrantReq(BaseModel):
@@ -220,14 +227,16 @@ async def api_tariffs():
 
 
 @app.get("/api/promo/{code}")
-async def api_check_promo(code: str):
+async def api_check_promo(code: str, phone: str | None = None, tariff_id: int | None = None):
     async with async_session() as session:
         try:
-            promo = await validate_promo_code(session, code)
+            promo = await validate_promo_code(session, code, phone=phone, tariff_id=tariff_id)
             return {
                 "code": promo.code,
                 "discount_percent": promo.discount_percent,
                 "valid_until": promo.valid_until.strftime("%d.%m.%Y") if promo.valid_until else None,
+                "target_audience": promo.target_audience or "all",
+                "tariff_ids": parse_tariff_ids(promo.tariff_ids),
             }
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -410,6 +419,8 @@ async def admin_promos():
                 "id": p.id, "code": p.code, "discount_percent": p.discount_percent,
                 "valid_until": p.valid_until.strftime("%Y-%m-%d") if p.valid_until else "",
                 "is_active": p.is_active,
+                "target_audience": p.target_audience or "all",
+                "tariff_ids": parse_tariff_ids(p.tariff_ids),
             }
             for p in res.scalars().all()
         ]
@@ -424,7 +435,7 @@ async def admin_create_promo(data: PromoReq):
         existing = await session.execute(select(PromoCode).where(PromoCode.code == code))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Такой промокод уже существует")
-        promo = PromoCode(code=code, discount_percent=data.discount_percent, valid_until=parse_date_end(data.valid_until))
+        promo = PromoCode(code=code, discount_percent=data.discount_percent, valid_until=parse_date_end(data.valid_until), target_audience=data.target_audience or "all", tariff_ids=",".join(str(x) for x in data.tariff_ids))
         session.add(promo)
         await session.commit()
         return {"ok": True, "id": promo.id}
@@ -442,6 +453,8 @@ async def admin_update_promo(promo_id: int, data: PromoReq):
         promo.code = code
         promo.discount_percent = data.discount_percent
         promo.valid_until = parse_date_end(data.valid_until)
+        promo.target_audience = data.target_audience or "all"
+        promo.tariff_ids = ",".join(str(x) for x in data.tariff_ids)
         await session.commit()
         return {"ok": True}
 
