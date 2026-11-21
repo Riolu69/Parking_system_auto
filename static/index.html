@@ -254,7 +254,7 @@
           <button class="btn btn-primary" onclick="checkStatus()">Показать статус</button>
           <div id="chk-result"></div>
           <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
-            <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">?????? / ???????? ??????????????</button>
+            <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">Помощь / Написать администратору</button>
           </div>
         </div>
       </div>
@@ -273,6 +273,13 @@
       </div>
 
       <div id="admin-content" class="hidden">
+        <div class="bar-row no-print" style="margin-bottom:14px;">
+          <div class="segmented">
+            <button class="seg-btn active" id="subbtn-main" onclick="switchAdminSub('main', this)">Основное</button>
+            <button class="seg-btn" id="subbtn-payments" onclick="switchAdminSub('payments', this)">Платежи</button>
+          </div>
+        </div>
+        <div id="adm-sub-main">
         <div class="stats-bar">
           <div class="stat-tile">
             <div class="stat-label">Ячейки RTU5024</div>
@@ -331,15 +338,24 @@
         <div class="card no-print">
           <div class="card-head"><h2>Промокоды</h2></div>
           <div class="bar-row">
-            <input id="new-promo-code" placeholder="Код (VIP20)" style="width:150px; text-transform:uppercase;" />
-            <input id="new-promo-disc" type="number" inputmode="numeric" placeholder="Скидка %" min="1" max="100" style="width:105px;" />
+            <input id="new-promo-code" placeholder="Код (VIP20)" style="width:130px; text-transform:uppercase;" />
+            <input id="new-promo-disc" type="number" inputmode="numeric" placeholder="Скидка %" min="1" max="100" style="width:95px;" />
             <input id="new-promo-date" type="date" title="Действует до" />
+            <select id="new-promo-aud" class="inline-inp" style="width:150px;">
+              <option value="all">Все клиенты</option>
+              <option value="new">Только новые</option>
+              <option value="existing">Только старые</option>
+            </select>
             <button class="btn btn-sm btn-ok" onclick="createPromo()">Добавить</button>
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Тарифы для нового промокода (если не выбрано — действует на все):</label>
+            <div id="new-promo-tariffs" class="chk-wrap"></div>
           </div>
           <div id="adm-promo-msg" class="msg"></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Промокод</th><th>Скидка (%)</th><th>Действует до</th><th></th></tr></thead>
+              <thead><tr><th>Промокод</th><th>Скидка</th><th>До</th><th>Клиенты</th><th>Тарифы (пусто = все)</th><th></th></tr></thead>
               <tbody id="promos-body"></tbody>
             </table>
           </div>
@@ -347,9 +363,16 @@
 
         <div class="card no-print">
           <div class="card-head"><h2>Тарифы и цены</h2></div>
+          <div class="bar-row">
+            <input id="new-t-name" placeholder="Название тарифа" style="width:170px;" />
+            <input id="new-t-desc" placeholder="Описание / доп. функции" style="width:210px;" />
+            <input id="new-t-price" type="number" inputmode="numeric" placeholder="Цена ₽" style="width:95px;" />
+            <input id="new-t-days" type="number" inputmode="numeric" placeholder="Дней" value="1" style="width:75px;" />
+            <button class="btn btn-sm btn-ok" onclick="createTariff()">Добавить</button>
+          </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Название</th><th>Цена (₽)</th><th>Дней</th><th></th></tr></thead>
+              <thead><tr><th>Название</th><th>Описание</th><th>Цена (₽)</th><th>Дней</th><th>Вкл</th><th></th></tr></thead>
               <tbody id="tariffs-body"></tbody>
             </table>
           </div>
@@ -394,6 +417,79 @@
             </table>
           </div>
         </div>
+        </div>
+
+        <div id="adm-sub-payments" class="hidden">
+          <div class="card" id="pay-auth-box" style="max-width:420px; margin:20px auto;">
+            <div class="card-head"><h2>Доступ к настройкам платежей</h2></div>
+            <div class="field">
+              <label>Дополнительный пароль</label>
+              <input id="pay-pass" type="password" placeholder="••••••••" />
+            </div>
+            <button class="btn btn-primary" onclick="unlockPayments()">Открыть платежи</button>
+            <div id="pay-auth-err" class="msg err"></div>
+          </div>
+
+          <div id="pay-panel" class="hidden">
+            <div class="card">
+              <div class="card-head">
+                <h2>Приём платежей и автоподписки</h2>
+                <button id="btn-autorenew" class="btn btn-sm btn-secondary" onclick="toggleAutoRenew()">Автоподписки: Выключены</button>
+              </div>
+              <div class="field">
+                <label>Активный платёжный сервис</label>
+                <select id="pay-provider" onchange="renderProviderFields()">
+                  <option value="manual">Ручной перевод по СБП (подтверждение админом)</option>
+                  <option value="yookassa">ЮKassa (карты, СБП, автосписания)</option>
+                  <option value="robokassa">Robokassa (карты, СБП, Робочеки)</option>
+                  <option value="tbank">Т-Банк / Т-Касса</option>
+                  <option value="cloudpayments">CloudPayments</option>
+                </select>
+              </div>
+
+              <div id="prov-manual" class="prov-box" style="color:var(--muted); font-size:13px; margin:10px 0;">
+                Используются реквизиты СБП из вкладки «Основное → Настройки».
+              </div>
+
+              <div id="prov-yookassa" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Shop ID (Идентификатор магазина)</label><input id="yk-shop" placeholder="123456" /></div>
+                  <div class="field"><label>Секретный ключ (Secret Key)</label><input id="yk-secret" type="password" placeholder="live_..." /></div>
+                </div>
+              </div>
+
+              <div id="prov-robokassa" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Идентификатор магазина (MerchantLogin)</label><input id="rk-login" placeholder="my_parking" /></div>
+                  <div class="field"><label>Пароль #1</label><input id="rk-pass1" type="password" /></div>
+                </div>
+                <div class="field"><label>Пароль #2 (для уведомлений)</label><input id="rk-pass2" type="password" /></div>
+              </div>
+
+              <div id="prov-tbank" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>TerminalKey</label><input id="tb-term" placeholder="1700000000000" /></div>
+                  <div class="field"><label>Пароль терминала (Secret)</label><input id="tb-pass" type="password" /></div>
+                </div>
+              </div>
+
+              <div id="prov-cloudpayments" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Public ID</label><input id="cp-pub" placeholder="pk_..." /></div>
+                  <div class="field"><label>API Secret</label><input id="cp-sec" type="password" /></div>
+                </div>
+              </div>
+
+              <div id="pay-webhook-box" class="status-box hidden" style="margin-bottom:12px;">
+                <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">Webhook URL (укажите в личном кабинете платёжного сервиса):</div>
+                <code id="pay-webhook-url"></code>
+              </div>
+
+              <button class="btn btn-primary" onclick="savePaymentSettings()">Сохранить настройки платежей</button>
+              <div id="pay-save-msg" class="msg ok"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -402,18 +498,18 @@
   <div id="help-modal" class="modal-bg hidden" onclick="if(event.target===this) closeHelpModal()">
     <div class="modal-card">
       <div class="card-head">
-        <h2>???????? ??????????????</h2>
-        <button class="btn btn-sm btn-secondary" onclick="closeHelpModal()">?</button>
+        <h2>Написать администратору</h2>
+        <button class="btn btn-sm btn-secondary" onclick="closeHelpModal()">×</button>
       </div>
       <div class="field">
-        <label>??? ??????? (???? ??????? ?? ????? Telegram)</label>
+        <label>Ваш телефон (если открыли не через Telegram)</label>
         <input id="help-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
       </div>
       <div class="field">
-        <label>?????????</label>
-        <textarea id="help-text" rows="4" placeholder="??????? ??? ??????..."></textarea>
+        <label>Сообщение</label>
+        <textarea id="help-text" rows="4" placeholder="Опишите ваш вопрос..."></textarea>
       </div>
-      <button class="btn btn-primary" onclick="sendSupport(this)">?????????</button>
+      <button class="btn btn-primary" onclick="sendSupport(this)">Отправить</button>
       <div id="help-msg" class="msg"></div>
     </div>
   </div>
@@ -461,8 +557,10 @@
     }
 
     function renderClientTariffs() {
-      const disc = activePromo ? activePromo.discount_percent : 0;
+      const baseDisc = activePromo ? activePromo.discount_percent : 0;
+      const allowedIds = (activePromo && activePromo.tariff_ids && activePromo.tariff_ids.length) ? activePromo.tariff_ids : null;
       document.getElementById('tariff-list').innerHTML = tariffs.map(t => {
+        const disc = (baseDisc && (!allowedIds || allowedIds.includes(t.id))) ? baseDisc : 0;
         const finalPrice = Math.max(0, Math.round(t.price * (100 - disc) / 100));
         const priceHtml = disc ? `<span class="t-old">${t.price} ₽</span>${finalPrice} ₽` : `${t.price} ₽`;
         return `
@@ -672,26 +770,49 @@
         ` : ''}</td>
       </tr>`).join('');
 
-      const promos = await pRes.json();
-      document.getElementById('promos-body').innerHTML = promos.map(p => `<tr>
-        <td><input class="inline-inp" id="pc-${p.id}" value="${p.code}" style="width:140px;text-transform:uppercase;"></td>
-        <td><input class="inline-inp" id="pd-${p.id}" type="number" inputmode="numeric" value="${p.discount_percent}" style="width:80px;"></td>
-        <td><input class="inline-inp" id="pv-${p.id}" type="date" value="${p.valid_until}" style="width:145px;"></td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-sm btn-acc" onclick="savePromo(${p.id})">Сохранить</button>
-          <button class="btn btn-sm btn-del" onclick="deletePromo(${p.id})">×</button>
-        </td>
-      </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">Промокодов пока нет</td></tr>';
-
-      tariffs = await tRes.json();
+      const admTariffs = await tRes.json();
+      tariffs = admTariffs.filter(t => t.is_active);
       renderClientTariffs();
-      document.getElementById('tariffs-body').innerHTML = tariffs.map(t => `<tr>
-        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name}" style="width:180px;"></td>
-        <td><input class="inline-inp" id="tdesc-${t.id}" value="${(t.description || '').replace(/"/g, '&quot;')}" placeholder="???. ??????? / ???????" style="width:220px;"></td>
-        <td><input class="inline-inp" id="tp-${t.id}" type="number" inputmode="numeric" value="${t.price}" style="width:95px;"></td>
-        <td><input class="inline-inp" id="td-${t.id}" type="number" inputmode="numeric" value="${t.days}" style="width:70px;" ${t.is_night ? 'disabled' : ''}></td>
-        <td><button class="btn btn-sm btn-acc" onclick="saveTariff(${t.id}, ${t.is_night})">Сохранить</button></td>
+
+      document.getElementById('new-promo-tariffs').innerHTML = admTariffs.map(t =>
+        `<label class="chk-lbl"><input type="checkbox" class="new-pt-chk" value="${t.id}" /> ${t.name}</label>`
+      ).join('');
+
+      document.getElementById('tariffs-body').innerHTML = admTariffs.map(t => `<tr>
+        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name.replace(/"/g, '&quot;')}" style="width:165px;"></td>
+        <td><input class="inline-inp" id="tdesc-${t.id}" value="${(t.description || '').replace(/"/g, '&quot;')}" placeholder="Описание" style="width:200px;"></td>
+        <td><input class="inline-inp" id="tp-${t.id}" type="number" inputmode="numeric" value="${t.price}" style="width:85px;"></td>
+        <td><input class="inline-inp" id="td-${t.id}" type="number" inputmode="numeric" value="${t.days}" style="width:65px;"></td>
+        <td style="text-align:center;"><input type="checkbox" id="tact-${t.id}" ${t.is_active ? 'checked' : ''} style="width:auto;"></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-acc" onclick="saveTariff(${t.id}, ${t.is_night})">Сохранить</button>
+          <button class="btn btn-sm btn-del" onclick="deleteTariff(${t.id})">×</button>
+        </td>
       </tr>`).join('');
+
+      const promos = await pRes.json();
+      document.getElementById('promos-body').innerHTML = promos.map(p => {
+        const chks = admTariffs.map(t =>
+          `<label class="chk-lbl"><input type="checkbox" class="pt-chk-${p.id}" value="${t.id}" ${(p.tariff_ids || []).includes(t.id) ? 'checked' : ''} /> ${t.name}</label>`
+        ).join('');
+        return `<tr>
+          <td><input class="inline-inp" id="pc-${p.id}" value="${p.code}" style="width:115px;text-transform:uppercase;"></td>
+          <td><input class="inline-inp" id="pd-${p.id}" type="number" inputmode="numeric" value="${p.discount_percent}" style="width:70px;"></td>
+          <td><input class="inline-inp" id="pv-${p.id}" type="date" value="${p.valid_until}" style="width:135px;"></td>
+          <td>
+            <select class="inline-inp" id="pa-${p.id}" style="width:135px;">
+              <option value="all" ${p.target_audience === 'all' ? 'selected' : ''}>Все клиенты</option>
+              <option value="new" ${p.target_audience === 'new' ? 'selected' : ''}>Только новые</option>
+              <option value="existing" ${p.target_audience === 'existing' ? 'selected' : ''}>Только старые</option>
+            </select>
+          </td>
+          <td><div class="chk-wrap">${chks}</div></td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-sm btn-acc" onclick="savePromo(${p.id})">Сохранить</button>
+            <button class="btn btn-sm btn-del" onclick="deletePromo(${p.id})">×</button>
+          </td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Промокодов пока нет</td></tr>';
 
       allUsers = await uRes.json();
       renderUsers();
@@ -762,10 +883,13 @@
 
     async function createPromo() {
       const msg = document.getElementById('adm-promo-msg');
+      const tIds = Array.from(document.querySelectorAll('.new-pt-chk:checked')).map(el => parseInt(el.value, 10));
       const body = {
         code: document.getElementById('new-promo-code').value.trim(),
         discount_percent: parseInt(document.getElementById('new-promo-disc').value, 10) || 0,
         valid_until: document.getElementById('new-promo-date').value || null,
+        target_audience: document.getElementById('new-promo-aud').value,
+        tariff_ids: tIds,
       };
       const r = await fetch('/api/admin/promos', {
         method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()}, body: JSON.stringify(body),
@@ -775,6 +899,7 @@
         document.getElementById('new-promo-code').value = '';
         document.getElementById('new-promo-disc').value = '';
         document.getElementById('new-promo-date').value = '';
+        document.querySelectorAll('.new-pt-chk').forEach(el => el.checked = false);
         msg.textContent = '';
         loadAdmin();
       } else {
@@ -784,12 +909,15 @@
     }
 
     async function savePromo(id) {
+      const tIds = Array.from(document.querySelectorAll(`.pt-chk-${id}:checked`)).map(el => parseInt(el.value, 10));
       await fetch(`/api/admin/promos/${id}`, {
         method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
         body: JSON.stringify({
           code: document.getElementById(`pc-${id}`).value.trim(),
           discount_percent: parseInt(document.getElementById(`pd-${id}`).value, 10) || 0,
           valid_until: document.getElementById(`pv-${id}`).value || null,
+          target_audience: document.getElementById(`pa-${id}`).value,
+          tariff_ids: tIds,
         }),
       });
       loadAdmin();
@@ -829,7 +957,7 @@
           description: document.getElementById('new-t-desc').value.trim(),
           price: parseInt(document.getElementById('new-t-price').value, 10) || 0,
           days: parseInt(document.getElementById('new-t-days').value, 10) || 1,
-          is_night: document.getElementById('new-t-night').checked,
+          is_night: false,
           is_active: true,
         }),
       });
@@ -839,7 +967,7 @@
       loadAdmin();
     }
 
-    async function saveTariff(id) {
+    async function saveTariff(id, isNight) {
       await fetch(`/api/admin/tariffs/${id}`, {
         method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
         body: JSON.stringify({
@@ -847,7 +975,7 @@
           description: document.getElementById(`tdesc-${id}`).value.trim(),
           price: parseInt(document.getElementById(`tp-${id}`).value, 10) || 0,
           days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
-          is_night: document.getElementById(`tnight-${id}`).checked,
+          is_night: !!isNight,
           is_active: document.getElementById(`tact-${id}`).checked,
         }),
       });
@@ -855,7 +983,7 @@
     }
 
     async function deleteTariff(id) {
-      if (!confirm('??????? ?????? (???? ?? ???? ??? ???? ??????, ?? ?????? ??????????)')) return;
+      if (!confirm('Удалить тариф? (Если по нему уже были заказы, он просто отключится)')) return;
       await fetch(`/api/admin/tariffs/${id}`, {method: 'DELETE', headers: {'X-Admin-Password': getAdminPass()}});
       loadAdmin();
     }
@@ -883,7 +1011,7 @@
       const text = document.getElementById('help-text').value.trim();
       const phone = document.getElementById('help-phone').value.trim();
       const msg = document.getElementById('help-msg');
-      if (!text) { msg.textContent = '??????? ????? ?????????.'; msg.className = 'msg err'; return; }
+      if (!text) { msg.textContent = 'Введите текст сообщения.'; msg.className = 'msg err'; return; }
       const tgUser = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe ? window.Telegram.WebApp.initDataUnsafe.user : null;
       btn.disabled = true;
       const r = await fetch('/api/support', {
@@ -899,13 +1027,114 @@
       btn.disabled = false;
       if (r.ok) {
         document.getElementById('help-text').value = '';
-        msg.textContent = '????????? ?????????? ??????????????!';
+        msg.textContent = 'Сообщение отправлено администратору!';
         msg.className = 'msg ok';
         setTimeout(closeHelpModal, 1500);
       } else {
         const d = await r.json();
-        msg.textContent = d.detail || '?????? ????????';
+        msg.textContent = d.detail || 'Ошибка отправки';
         msg.className = 'msg err';
+      }
+    }
+
+    
+    let payAutoRenew = '0';
+
+    function switchAdminSub(tab, btn) {
+      document.getElementById('subbtn-main').classList.toggle('active', tab === 'main');
+      document.getElementById('subbtn-payments').classList.toggle('active', tab === 'payments');
+      document.getElementById('adm-sub-main').classList.toggle('hidden', tab !== 'main');
+      document.getElementById('adm-sub-payments').classList.toggle('hidden', tab !== 'payments');
+      if (tab === 'payments' && sessionStorage.getItem('pay_pass')) {
+        document.getElementById('pay-pass').value = sessionStorage.getItem('pay_pass');
+        unlockPayments();
+      }
+    }
+
+    function updateAutoRenewBtn() {
+      const btn = document.getElementById('btn-autorenew');
+      const on = payAutoRenew === '1';
+      btn.textContent = on ? 'Автоподписки: Включены' : 'Автоподписки: Выключены';
+      btn.className = on ? 'btn btn-sm btn-ok' : 'btn btn-sm btn-secondary';
+    }
+
+    function toggleAutoRenew() {
+      payAutoRenew = payAutoRenew === '1' ? '0' : '1';
+      updateAutoRenewBtn();
+    }
+
+    function renderProviderFields() {
+      const prov = document.getElementById('pay-provider').value;
+      document.querySelectorAll('.prov-box').forEach(el => el.classList.add('hidden'));
+      const box = document.getElementById('prov-' + prov);
+      if (box) box.classList.remove('hidden');
+      const wh = document.getElementById('pay-webhook-box');
+      if (prov === 'manual') {
+        wh.classList.add('hidden');
+      } else {
+        wh.classList.remove('hidden');
+        document.getElementById('pay-webhook-url').textContent = window.location.origin + '/api/payments/webhook/' + prov;
+      }
+    }
+
+    async function unlockPayments() {
+      const ppass = document.getElementById('pay-pass').value;
+      const err = document.getElementById('pay-auth-err');
+      err.textContent = '';
+      const r = await fetch('/api/admin/payments/settings', {
+        headers: {'X-Admin-Password': getAdminPass(), 'X-Payment-Password': ppass}
+      });
+      if (!r.ok) {
+        sessionStorage.removeItem('pay_pass');
+        err.textContent = 'Неверный дополнительный пароль';
+        return;
+      }
+      sessionStorage.setItem('pay_pass', ppass);
+      const d = await r.json();
+      document.getElementById('pay-auth-box').classList.add('hidden');
+      document.getElementById('pay-panel').classList.remove('hidden');
+      document.getElementById('pay-provider').value = d.pay_provider || 'manual';
+      payAutoRenew = d.pay_auto_renew === '1' ? '1' : '0';
+      updateAutoRenewBtn();
+      document.getElementById('yk-shop').value = d.yk_shop_id || '';
+      document.getElementById('yk-secret').value = d.yk_secret_key || '';
+      document.getElementById('rk-login').value = d.rk_login || '';
+      document.getElementById('rk-pass1').value = d.rk_pass1 || '';
+      document.getElementById('rk-pass2').value = d.rk_pass2 || '';
+      document.getElementById('tb-term').value = d.tb_terminal_key || '';
+      document.getElementById('tb-pass').value = d.tb_password || '';
+      document.getElementById('cp-pub').value = d.cp_public_id || '';
+      document.getElementById('cp-sec').value = d.cp_api_secret || '';
+      renderProviderFields();
+    }
+
+    async function savePaymentSettings() {
+      const ppass = sessionStorage.getItem('pay_pass') || document.getElementById('pay-pass').value;
+      const m = document.getElementById('pay-save-msg');
+      const r = await fetch('/api/admin/payments/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass(), 'X-Payment-Password': ppass},
+        body: JSON.stringify({
+          pay_provider: document.getElementById('pay-provider').value,
+          pay_auto_renew: payAutoRenew,
+          yk_shop_id: document.getElementById('yk-shop').value.trim(),
+          yk_secret_key: document.getElementById('yk-secret').value.trim(),
+          rk_login: document.getElementById('rk-login').value.trim(),
+          rk_pass1: document.getElementById('rk-pass1').value.trim(),
+          rk_pass2: document.getElementById('rk-pass2').value.trim(),
+          tb_terminal_key: document.getElementById('tb-term').value.trim(),
+          tb_password: document.getElementById('tb-pass').value.trim(),
+          cp_public_id: document.getElementById('cp-pub').value.trim(),
+          cp_api_secret: document.getElementById('cp-sec').value.trim(),
+        }),
+      });
+      if (r.ok) {
+        m.textContent = 'Настройки платежей сохранены';
+        m.className = 'msg ok';
+        setTimeout(() => m.textContent = '', 2500);
+      } else {
+        m.textContent = 'Ошибка сохранения';
+        m.className = 'msg err';
       }
     }
 

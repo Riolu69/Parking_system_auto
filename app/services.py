@@ -56,7 +56,47 @@ async def set_app_settings(session: AsyncSession, updates: dict):
     await session.commit()
 
 
-async def validate_promo_code(session: AsyncSession, code: str) -> PromoCode:
+def parse_tariff_ids(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    return [int(x) for x in raw.split(",") if x.strip().isdigit()]
+
+
+
+
+PAYMENT_SETTING_DEFAULTS = {
+    "pay_provider": "manual",
+    "pay_auto_renew": "0",
+    "yk_shop_id": "",
+    "yk_secret_key": "",
+    "rk_login": "",
+    "rk_pass1": "",
+    "rk_pass2": "",
+    "tb_terminal_key": "",
+    "tb_password": "",
+    "cp_public_id": "",
+    "cp_api_secret": "",
+}
+
+
+async def get_payment_settings(session: AsyncSession) -> dict:
+    res = await session.execute(select(AppSetting))
+    data = {s.key: s.value for s in res.scalars().all()}
+    return {k: data.get(k, v) for k, v in PAYMENT_SETTING_DEFAULTS.items()}
+
+
+async def set_payment_settings(session: AsyncSession, updates: dict):
+    filtered = {k: v for k, v in updates.items() if k in PAYMENT_SETTING_DEFAULTS}
+    await set_app_settings(session, filtered)
+
+
+async def validate_promo_code(
+    session: AsyncSession,
+    code: str,
+    user_id: int | None = None,
+    phone: str | None = None,
+    tariff_id: int | None = None,
+) -> PromoCode:
     norm_code = code.strip().upper()
     res = await session.execute(
         select(PromoCode).where(PromoCode.code == norm_code, PromoCode.is_active == True)
@@ -66,6 +106,28 @@ async def validate_promo_code(session: AsyncSession, code: str) -> PromoCode:
         raise ValueError("Промокод не найден")
     if promo.valid_until and promo.valid_until < datetime.now():
         raise ValueError("Срок действия промокода истёк")
+
+    allowed_tariffs = parse_tariff_ids(getattr(promo, "tariff_ids", ""))
+    if tariff_id is not None and allowed_tariffs and tariff_id not in allowed_tariffs:
+        raise ValueError("Промокод не действует для выбранного тарифа")
+
+    audience = getattr(promo, "target_audience", "all") or "all"
+    if audience in ("new", "existing"):
+        uid = user_id
+        if uid is None and phone:
+            norm_p = normalize_phone(phone)
+            u_res = await session.execute(select(User.id).where(User.phone == norm_p))
+            uid = u_res.scalar_one_or_none()
+        paid_cnt = 0
+        if uid is not None:
+            paid_cnt = (await session.execute(
+                select(func.count(Order.id)).where(Order.user_id == uid, Order.status == "paid")
+            )).scalar() or 0
+        if audience == "new" and paid_cnt > 0:
+            raise ValueError("Промокод действует только для новых клиентов")
+        if audience == "existing" and paid_cnt == 0:
+            raise ValueError("Промокод действует только для постоянных клиентов")
+
     return promo
 
 

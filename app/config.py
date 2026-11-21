@@ -1,4 +1,4 @@
-﻿from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     RTU_PHONE: str = "+79990000000"
     WORKER_API_TOKEN: str
     ADMIN_WEB_PASSWORD: str = "admin123"
+    PAYMENT_ADMIN_PASSWORD: str = "pay1234"
     WEBAPP_URL: str = ""
+    BOT_PROXY: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8-sig", extra="ignore")
 

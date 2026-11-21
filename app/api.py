@@ -18,7 +18,7 @@ from app.database import init_db, async_session, User, SmsQueue, Tariff, Order, 
 from app.services import (
     normalize_phone, register_user_and_car, create_order, confirm_order, reject_order,
     grant_access_days, revoke_access, get_next_sms_task, report_sms_task,
-    validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings, mark_order_paid_by_user,
+    validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings, get_payment_settings, set_payment_settings, mark_order_paid_by_user,
     process_expired_slots, pop_expiring_slots, queue_open_gate, get_finance_stats
 )
 from app.bot import (
@@ -107,6 +107,11 @@ def verify_admin(x_admin_password: str = Header(None)):
         raise HTTPException(status_code=403, detail="Invalid admin password")
 
 
+def verify_payment_admin(x_payment_password: str = Header(None)):
+    if x_payment_password != settings.PAYMENT_ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Неверный пароль раздела платежей")
+
+
 def parse_date_end(date_str: str | None) -> datetime | None:
     if not date_str:
         return None
@@ -120,6 +125,20 @@ class RegisterReq(BaseModel):
     car_model: str | None = None
     full_name: str | None = None
     promo_code: str | None = None
+
+
+class PaymentSettingsReq(BaseModel):
+    pay_provider: str = "manual"
+    pay_auto_renew: str = "0"
+    yk_shop_id: str = ""
+    yk_secret_key: str = ""
+    rk_login: str = ""
+    rk_pass1: str = ""
+    rk_pass2: str = ""
+    tb_terminal_key: str = ""
+    tb_password: str = ""
+    cp_public_id: str = ""
+    cp_api_secret: str = ""
 
 
 class SettingsReq(BaseModel):
@@ -306,13 +325,11 @@ async def api_status(phone: str):
         }
 
 
-
-
 @app.post("/api/support")
 async def api_support(data: SupportReq):
     txt = data.text.strip()
     if not txt:
-        raise HTTPException(status_code=400, detail="??????? ????? ?????????")
+        raise HTTPException(status_code=400, detail="Введите текст сообщения")
     tg_id = data.telegram_id
     phone = normalize_phone(data.phone) if data.phone else ""
     full_name = data.full_name or ""
@@ -388,11 +405,55 @@ async def admin_export_users():
     return Response(content=("\ufeff" + buf.getvalue()).encode("utf-8"), media_type="text/csv; charset=utf-8")
 
 
+@app.get("/api/admin/payments/settings", dependencies=[Depends(verify_admin), Depends(verify_payment_admin)])
+async def admin_get_payment_settings():
+    async with async_session() as session:
+        return await get_payment_settings(session)
+
+
+@app.put("/api/admin/payments/settings", dependencies=[Depends(verify_admin), Depends(verify_payment_admin)])
+async def admin_set_payment_settings(data: PaymentSettingsReq):
+    async with async_session() as session:
+        await set_payment_settings(session, data.model_dump())
+        return {"ok": True}
+
+
 @app.put("/api/admin/settings", dependencies=[Depends(verify_admin)])
 async def admin_set_settings(data: SettingsReq):
     async with async_session() as session:
         await set_app_settings(session, data.model_dump())
         return {"ok": True}
+
+
+@app.get("/api/admin/tariffs", dependencies=[Depends(verify_admin)])
+async def admin_tariffs():
+    async with async_session() as session:
+        res = await session.execute(select(Tariff).order_by(Tariff.id))
+        return [
+            {
+                "id": t.id, "code": t.code, "name": t.name, "price": t.price,
+                "days": t.days, "is_night": t.is_night, "is_active": t.is_active,
+                "description": t.description or "",
+            }
+            for t in res.scalars().all()
+        ]
+
+
+@app.post("/api/admin/tariffs", dependencies=[Depends(verify_admin)])
+async def admin_create_tariff(data: TariffCreateReq):
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="Укажите название тарифа")
+    async with async_session() as session:
+        code = f"t_{int(time.time() * 1000) % 100000000}"
+        t = Tariff(
+            code=code, name=data.name.strip(), price=max(0, data.price),
+            days=0 if data.is_night else max(1, data.days),
+            is_night=data.is_night, is_active=data.is_active,
+            description=data.description.strip(),
+        )
+        session.add(t)
+        await session.commit()
+        return {"ok": True, "id": t.id}
 
 
 @app.put("/api/admin/tariffs/{tariff_id}", dependencies=[Depends(verify_admin)])
@@ -401,13 +462,30 @@ async def admin_update_tariff(tariff_id: int, data: TariffUpdateReq):
         t = await session.get(Tariff, tariff_id)
         if not t:
             raise HTTPException(status_code=404, detail="Тариф не найден")
-        t.name = data.name
-        t.price = data.price
-        t.days = data.days
+        t.name = data.name.strip()
+        t.price = max(0, data.price)
+        t.days = 0 if data.is_night else max(1, data.days)
         t.is_night = data.is_night
-        t.description = data.description
+        t.is_active = data.is_active
+        t.description = data.description.strip()
         await session.commit()
         return {"ok": True}
+
+
+@app.delete("/api/admin/tariffs/{tariff_id}", dependencies=[Depends(verify_admin)])
+async def admin_delete_tariff(tariff_id: int):
+    async with async_session() as session:
+        t = await session.get(Tariff, tariff_id)
+        if not t:
+            return {"ok": True}
+        used = (await session.execute(select(func.count(Order.id)).where(Order.tariff_id == tariff_id))).scalar() or 0
+        if used > 0:
+            t.is_active = False
+            await session.commit()
+            return {"ok": True, "archived": True}
+        await session.delete(t)
+        await session.commit()
+        return {"ok": True, "archived": False}
 
 
 @app.get("/api/admin/promos", dependencies=[Depends(verify_admin)])

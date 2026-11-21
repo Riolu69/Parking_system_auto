@@ -97,8 +97,6 @@ class RtuSlot(Base):
     slot_number = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     valid_until = Column(DateTime, nullable=True)
-    target_audience = Column(String(20), default="all", nullable=False)
-    tariff_ids = Column(String(255), default="", nullable=False)
     status = Column(String(20), default="free")
     notified_expiring = Column(Boolean, default=False)
 
