@@ -1,0 +1,816 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Парковка" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>Парковка — Доступ к шлагбауму</title>
+  <style>
+    :root {
+      --bg: #f5f5f7; --surface: rgba(255, 255, 255, 0.85); --card: #ffffff; --card-elev: #fbfbfd;
+      --text: #1d1d1f; --muted: #6e6e73; --border: rgba(0, 0, 0, 0.08); --border-strong: rgba(0, 0, 0, 0.14);
+      --accent: #0071e3; --accent-hover: #0077ed; --accent-soft: rgba(0, 113, 227, 0.1);
+      --ok: #248a3d; --ok-soft: rgba(36, 138, 61, 0.12);
+      --warn: #b25000; --warn-soft: rgba(178, 80, 0, 0.12);
+      --danger: #d70015; --danger-soft: rgba(215, 0, 21, 0.12);
+      --shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+      --seg-bg: rgba(118, 118, 128, 0.12); --seg-active: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000; --surface: rgba(28, 28, 30, 0.78); --card: #1c1c1e; --card-elev: #2c2c2e;
+        --text: #f5f5f7; --muted: #98989d; --border: rgba(255, 255, 255, 0.1); --border-strong: rgba(255, 255, 255, 0.18);
+        --accent: #0a84ff; --accent-hover: #409cff; --accent-soft: rgba(10, 132, 255, 0.16);
+        --ok: #30d158; --ok-soft: rgba(48, 209, 88, 0.15);
+        --warn: #ff9f0a; --warn-soft: rgba(255, 159, 10, 0.15);
+        --danger: #ff453a; --danger-soft: rgba(255, 69, 58, 0.15);
+        --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        --seg-bg: rgba(118, 118, 128, 0.24); --seg-active: #3a3a3c;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; min-height: 100vh;
+    }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1060px; margin: 0 auto; padding: 10px 18px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 16px; letter-spacing: -0.02em; }
+    .brand-dot {
+      width: 24px; height: 24px; border-radius: 7px; background: var(--accent); color: #fff;
+      display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    }
+    .segmented { display: inline-flex; background: var(--seg-bg); padding: 3px; border-radius: 10px; gap: 2px; }
+    .seg-btn {
+      border: none; background: transparent; color: var(--muted); padding: 5px 14px;
+      border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.18s ease;
+    }
+    .seg-btn.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 18px; }
+    .hero { margin-bottom: 16px; }
+    .hero h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+    .hero p { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; align-items: start; }
+    @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat-tile {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; box-shadow: var(--shadow);
+    }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+    .stat-val { font-size: 18px; font-weight: 700; margin-top: 2px; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px;
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+    .card h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 520px) { .fields-row { grid-template-columns: 1fr; } }
+
+    .field { margin-bottom: 10px; }
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+    input, textarea {
+      width: 100%; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: 10px;
+      background: var(--card-elev); color: var(--text); font-size: 16px; outline: none; font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+    /* Живой российский госномер */
+    .plate-preview {
+      display: inline-flex; align-items: stretch; border: 2px solid #1d1d1f; border-radius: 7px;
+      background: #ffffff; color: #1d1d1f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 800; overflow: hidden; margin-top: 6px; height: 34px; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+    .plate-main { padding: 0 10px; display: flex; align-items: center; font-size: 16px; letter-spacing: 1px; }
+    .plate-reg {
+      border-left: 2px solid #1d1d1f; padding: 0 7px; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; line-height: 1; font-size: 12px; min-width: 38px;
+    }
+    .plate-rus { font-size: 7px; font-weight: 700; margin-top: 2px; }
+
+    .promo-row { display: flex; gap: 8px; }
+    .promo-row input { flex: 1; text-transform: uppercase; }
+    .promo-row button { flex-shrink: 0; }
+
+    .tariff-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 4px; }
+    @media (max-width: 520px) { .tariff-grid { grid-template-columns: 1fr; } }
+    .tariff-card {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong);
+      background: var(--card-elev); cursor: pointer; transition: all 0.15s ease;
+    }
+    .tariff-card:hover { border-color: var(--accent); }
+    .tariff-card.selected {
+      border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .t-name { font-size: 13px; font-weight: 500; }
+    .t-price { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; margin-left: 8px; text-align: right; }
+    .t-old { font-size: 11px; color: var(--muted); text-decoration: line-through; font-weight: 400; display: block; }
+
+    .btn {
+      display: inline-flex; justify-content: center; align-items: center; border: none; text-decoration: none;
+      border-radius: 11px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: transform 0.1s, opacity 0.15s, background 0.15s; gap: 6px;
+    }
+    .btn:active { transform: scale(0.985); }
+    .btn-primary { width: 100%; background: var(--accent); color: #fff; margin-top: 8px; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--seg-bg); color: var(--text); padding: 9px 14px; border-radius: 10px; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; color: #fff; }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-del { background: var(--danger); color: #fff; }
+    .btn-acc { background: var(--accent); color: #fff; }
+
+    .msg { margin-top: 8px; font-size: 13px; }
+    .msg.ok { color: var(--ok); }
+    .msg.err { color: var(--danger); }
+    .msg.warn { color: var(--warn); }
+
+    .pay-sheet {
+      margin-top: 12px; padding: 14px; border-radius: 12px;
+      background: var(--accent-soft); border: 1px solid var(--accent); font-size: 13px;
+    }
+    .pay-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .status-box {
+      margin-top: 12px; padding: 14px; border-radius: 12px;
+      background: var(--card-elev); border: 1px solid var(--border); font-size: 13px;
+    }
+    .hidden { display: none !important; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .st-active, .st-paid, .st-sent { background: var(--ok-soft); color: var(--ok); }
+    .st-pending, .st-pending_add, .st-pending_del { background: var(--warn-soft); color: var(--warn); }
+    .st-paid_by_user { background: var(--accent-soft); color: var(--accent); }
+    .st-error, .st-rejected { background: var(--danger-soft); color: var(--danger); }
+    .inline-inp { padding: 5px 8px; font-size: 13px; border-radius: 8px; }
+    .bar-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+    .bar-row input { width: auto; font-size: 13px; padding: 7px 10px; }
+    .qr-grid { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+    .qr-item { text-align: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; color: #1d1d1f; }
+    .qr-item img { width: 150px; height: 150px; display: block; margin: 0 auto 8px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+    @media print {
+      .topbar, .stats-bar, .no-print { display: none !important; }
+      body { background: #fff; color: #000; }
+      .card { box-shadow: none; border: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-dot">P</div>
+        <span>Парковка</span>
+      </div>
+      <div class="segmented">
+        <button class="seg-btn active" onclick="switchTab('client', this)">Водитель</button>
+        <button class="seg-btn" onclick="switchTab('admin', this)">Админка</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Клиент -->
+    <section id="tab-client">
+      <div class="hero">
+        <h1>Доступ к шлагбауму</h1>
+        <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Оформление пропуска</h2></div>
+          <div class="fields-row">
+            <div class="field">
+              <label>Телефон (для звонка на шлагбаум)</label>
+              <input id="reg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+            </div>
+            <div class="field">
+              <label>Госномер автомобиля</label>
+              <input id="reg-plate" type="text" autocapitalize="characters" placeholder="А123ВС777" oninput="updatePlatePreview(this.value)" />
+              <div id="plate-preview" class="plate-preview hidden">
+                <div class="plate-main" id="pl-main">А 123 ВС</div>
+                <div class="plate-reg"><span id="pl-reg">777</span><span class="plate-rus">RUS</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Марка и модель (необязательно)</label>
+            <input id="reg-model" type="text" placeholder="Например, Geely Atlas Pro" />
+          </div>
+          <div class="field">
+            <label>Промокод (если есть)</label>
+            <div class="promo-row">
+              <input id="reg-promo" type="text" autocapitalize="characters" placeholder="SALE10" />
+              <button class="btn btn-secondary" type="button" onclick="applyPromo()">Применить</button>
+            </div>
+            <div id="promo-msg" class="msg"></div>
+          </div>
+          <div class="field">
+            <label>Тариф</label>
+            <div id="tariff-list" class="tariff-grid"></div>
+          </div>
+          <button class="btn btn-primary" onclick="registerAndPay()">Перейти к оплате</button>
+          <div id="reg-msg" class="msg"></div>
+          <div id="pay-box" class="pay-sheet hidden"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Проверить мой статус</h2></div>
+          <div class="field">
+            <label>Номер телефона</label>
+            <input id="chk-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+          </div>
+          <button class="btn btn-primary" onclick="checkStatus()">Показать статус</button>
+          <div id="chk-result"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Админка -->
+    <section id="tab-admin" class="hidden">
+      <div class="card no-print" id="admin-login" style="max-width: 400px; margin: 30px auto;">
+        <div class="card-head"><h2>Вход для администратора</h2></div>
+        <div class="field">
+          <label>Пароль</label>
+          <input id="adm-pass" type="password" placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary" onclick="loadAdmin()">Войти</button>
+        <div id="adm-err" class="msg err"></div>
+      </div>
+
+      <div id="admin-content" class="hidden">
+        <div class="stats-bar">
+          <div class="stat-tile">
+            <div class="stat-label">Ячейки RTU5024</div>
+            <div class="stat-val" id="stat-slots">— / 200</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Выручка сегодня</div>
+            <div class="stat-val" id="stat-rev-day">— ₽</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">За 7 / 30 дней</div>
+            <div class="stat-val" style="font-size:15px;" id="stat-rev-period">—</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Модем RX100-R4</div>
+            <div class="stat-val" id="stat-worker">—</div>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head">
+            <h2>Быстрые действия</h2>
+            <div class="bar-row" style="margin:0;">
+              <button class="btn btn-sm btn-ok" onclick="openGateNow()">Открыть шлагбаум</button>
+              <button class="btn btn-sm btn-acc" onclick="exportUsersCsv()">Выгрузить Excel (CSV)</button>
+              <button class="btn btn-sm btn-secondary" onclick="backupNow()">Бэкап БД в TG</button>
+              <button class="btn btn-sm btn-acc" onclick="loadAdmin()">Обновить</button>
+            </div>
+          </div>
+          <div id="quick-msg" class="msg ok" style="margin-top:0;"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Заявки на оплату</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Время</th><th>Телефон / Авто</th><th>Тариф</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
+              <tbody id="orders-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Настройки (СБП, шлагбаум, бот)</h2></div>
+          <div class="bar-row">
+            <input id="set-sbp-phone" type="tel" inputmode="tel" placeholder="Телефон СБП" style="width:165px;" />
+            <input id="set-sbp-bank" placeholder="Банк" style="width:165px;" />
+            <input id="set-sbp-rec" placeholder="Получатель" style="width:150px;" />
+            <input id="set-gate-phone" type="tel" inputmode="tel" placeholder="Номер шлагбаума" style="width:165px;" />
+            <input id="set-bot-user" placeholder="Юзернейм бота (без @)" style="width:170px;" />
+            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить</button>
+          </div>
+          <div id="pay-set-msg" class="msg ok"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Промокоды</h2></div>
+          <div class="bar-row">
+            <input id="new-promo-code" placeholder="Код (VIP20)" style="width:150px; text-transform:uppercase;" />
+            <input id="new-promo-disc" type="number" inputmode="numeric" placeholder="Скидка %" min="1" max="100" style="width:105px;" />
+            <input id="new-promo-date" type="date" title="Действует до" />
+            <button class="btn btn-sm btn-ok" onclick="createPromo()">Добавить</button>
+          </div>
+          <div id="adm-promo-msg" class="msg"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Промокод</th><th>Скидка (%)</th><th>Действует до</th><th></th></tr></thead>
+              <tbody id="promos-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Тарифы и цены</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Название</th><th>Цена (₽)</th><th>Дней</th><th></th></tr></thead>
+              <tbody id="tariffs-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head">
+            <h2>Клиенты и ячейки RTU5024</h2>
+            <input id="user-search" placeholder="Поиск по телефону или номеру..." oninput="renderUsers()" style="width:240px; font-size:13px; padding:6px 10px;" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Телефон</th><th>Машины</th><th>Ячейка</th><th>Действия</th></tr></thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Рассылка водителям в Telegram</h2></div>
+          <div class="bar-row">
+            <input id="bc-text" placeholder="Например: Завтра в 10:00 уборка снега..." style="flex:1; min-width:240px;" />
+            <button class="btn btn-sm btn-acc" onclick="sendBroadcast()">Отправить всем</button>
+          </div>
+          <div id="bc-msg" class="msg ok"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>QR-коды для печати на въезд</h2>
+            <button class="btn btn-sm btn-secondary no-print" onclick="window.print()">Распечатать</button>
+          </div>
+          <div id="qr-box" class="qr-grid"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Очередь SMS на RX100-R4</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Время</th><th>Ячейка</th><th>Команда</th><th>Статус</th></tr></thead>
+              <tbody id="queue-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let tariffs = [];
+    let allUsers = [];
+    let selectedTariffId = null;
+    let activePromo = null;
+
+    function formatPhoneInput(el) {
+      let d = el.value.replace(/\D/g, '');
+      if (!d) { el.value = ''; return; }
+      if (d[0] === '8') d = '7' + d.slice(1);
+      if (d[0] !== '7') d = '7' + d;
+      d = d.slice(0, 11);
+      let res = '+7';
+      if (d.length > 1) res += ' (' + d.slice(1, 4);
+      if (d.length >= 5) res += ') ' + d.slice(4, 7);
+      if (d.length >= 8) res += '-' + d.slice(7, 9);
+      if (d.length >= 10) res += '-' + d.slice(9, 11);
+      el.value = res;
+    }
+
+    function updatePlatePreview(val) {
+      const clean = val.replace(/\s+/g, '').toUpperCase();
+      const box = document.getElementById('plate-preview');
+      if (clean.length < 4) { box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      const m = clean.match(/^([А-ЯA-Z])(\d{3})([А-ЯA-Z]{2})(\d{2,3})?$/);
+      if (m) {
+        document.getElementById('pl-main').textContent = `${m[1]} ${m[2]} ${m[3]}`;
+        document.getElementById('pl-reg').textContent = m[4] || '77';
+      } else {
+        document.getElementById('pl-main').textContent = clean.slice(0, 6);
+        document.getElementById('pl-reg').textContent = clean.slice(6, 9) || 'RUS';
+      }
+    }
+
+    async function loadTariffs() {
+      const r = await fetch('/api/tariffs');
+      tariffs = await r.json();
+      if (tariffs.length && !selectedTariffId) selectedTariffId = tariffs[0].id;
+      renderClientTariffs();
+    }
+
+    function renderClientTariffs() {
+      const disc = activePromo ? activePromo.discount_percent : 0;
+      document.getElementById('tariff-list').innerHTML = tariffs.map(t => {
+        const finalPrice = Math.max(0, Math.round(t.price * (100 - disc) / 100));
+        const priceHtml = disc ? `<span class="t-old">${t.price} ₽</span>${finalPrice} ₽` : `${t.price} ₽`;
+        return `
+          <div class="tariff-card ${t.id === selectedTariffId ? 'selected' : ''}" onclick="selectTariff(${t.id})">
+            <span class="t-name">${t.name}</span>
+            <span class="t-price">${priceHtml}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectTariff(id) { selectedTariffId = id; renderClientTariffs(); }
+
+    async function applyPromo() {
+      const inp = document.getElementById('reg-promo');
+      const msg = document.getElementById('promo-msg');
+      const code = inp.value.trim();
+      if (!code) { activePromo = null; msg.textContent = ''; renderClientTariffs(); return; }
+      const r = await fetch('/api/promo/' + encodeURIComponent(code));
+      const d = await r.json();
+      if (r.ok) {
+        activePromo = d;
+        msg.textContent = `Применён ${d.code}: скидка ${d.discount_percent}%` + (d.valid_until ? ` (до ${d.valid_until})` : '');
+        msg.className = 'msg ok';
+      } else {
+        activePromo = null;
+        inp.value = ''; // Очищаем невалидный промокод, чтобы не мешал оплате
+        msg.textContent = (d.detail || 'Промокод недействителен') + ' — поле очищено, можно продолжить оплату.';
+        msg.className = 'msg warn';
+      }
+      renderClientTariffs();
+    }
+
+    function switchTab(name, btn) {
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-client').classList.toggle('hidden', name !== 'client');
+      document.getElementById('tab-admin').classList.toggle('hidden', name !== 'admin');
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text);
+      const old = btn.textContent;
+      btn.textContent = 'Скопировано!';
+      setTimeout(() => btn.textContent = old, 1500);
+    }
+
+    async function markUserPaid(orderId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Отправка...';
+      await fetch(`/api/orders/${orderId}/paid`, {method: 'POST'});
+      btn.textContent = 'Отправлено админу';
+      btn.className = 'btn btn-sm btn-ok';
+    }
+
+    async function registerAndPay() {
+      const msg = document.getElementById('reg-msg');
+      const payBox = document.getElementById('pay-box');
+      const promoInp = document.getElementById('reg-promo');
+      payBox.classList.add('hidden');
+      const body = {
+        phone: document.getElementById('reg-phone').value.trim(),
+        plate_number: document.getElementById('reg-plate').value.trim(),
+        car_model: document.getElementById('reg-model').value.trim() || null,
+        tariff_id: selectedTariffId,
+        promo_code: activePromo ? activePromo.code : (promoInp.value.trim() || null),
+      };
+      if (!body.phone || !body.plate_number) {
+        msg.textContent = 'Укажите телефон и госномер автомобиля.';
+        msg.className = 'msg err';
+        return;
+      }
+      const r = await fetch('/api/register', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        if (promoInp.value.trim() && !data.promo_code) {
+          promoInp.value = '';
+          activePromo = null;
+          renderClientTariffs();
+        }
+        msg.textContent = '';
+        payBox.classList.remove('hidden');
+        const p = data.payment;
+        const promoText = data.promo_code ? ` (${data.promo_code} -${data.discount_percent}%)` : '';
+        payBox.innerHTML = `
+          <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
+          <div>СБП: <b>${p.sbp_phone}</b> (${p.sbp_bank})</div>
+          <div style="color:var(--muted); margin-bottom:6px;">Получатель: ${p.sbp_recipient}</div>
+          <div class="pay-actions">
+            <button class="btn btn-sm btn-secondary" onclick="copyText('${p.sbp_phone}', this)">Скопировать номер</button>
+            <button class="btn btn-sm btn-ok" onclick="markUserPaid(${data.order_id}, this)">Я оплатил</button>
+          </div>
+        `;
+      } else {
+        msg.textContent = data.detail || 'Ошибка';
+        msg.className = 'msg err';
+      }
+    }
+
+    async function checkStatus() {
+      const box = document.getElementById('chk-result');
+      const phone = document.getElementById('chk-phone').value.trim();
+      if (!phone) return;
+      const r = await fetch('/api/status/' + encodeURIComponent(phone));
+      if (!r.ok) { box.innerHTML = '<div class="msg err">Номер не найден в базе.</div>'; return; }
+      const d = await r.json();
+      const cars = d.vehicles.map(v => `${v.plate}${v.model ? ' · ' + v.model : ''}`).join('<br>') || 'нет';
+      const gateBtns = (d.slot && d.slot.status === 'active' && d.gate_phone)
+        ? `<div class="pay-actions" style="margin-top:10px;">
+             <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на шлагбаум</a>
+             <a class="btn btn-sm btn-secondary" href="/api/gate-contact.vcf">Сохранить контакт</a>
+           </div>`
+        : '';
+      const slot = d.slot
+        ? `Ячейка #${d.slot.number} <span class="pill st-${d.slot.status}">${d.slot.status}</span><br><span style="color:var(--muted)">Действует до: ${d.slot.valid_until || '—'}</span>${gateBtns}`
+        : '<span style="color:var(--muted)">Доступ ещё не активирован</span>';
+      box.innerHTML = `<div class="status-box"><div style="font-weight:600; margin-bottom:6px;">+${d.phone}</div><div style="margin-bottom:8px;">${cars}</div><div>${slot}</div></div>`;
+    }
+
+    function getAdminPass() { return document.getElementById('adm-pass').value || localStorage.getItem('adm_pass') || ''; }
+
+    function renderUsers() {
+      const q = (document.getElementById('user-search').value || '').trim().toLowerCase();
+      const filtered = allUsers.filter(u =>
+        u.phone.includes(q) || u.vehicles.some(v => v.plate.toLowerCase().includes(q))
+      );
+      document.getElementById('users-body').innerHTML = filtered.map(u => {
+        const cars = u.vehicles.map(v => v.plate).join(', ') || '—';
+        const slot = u.slot
+          ? `#${u.slot.number} <span class="pill st-${u.slot.status}">${u.slot.status}</span><br><span style="color:var(--muted);font-size:12px;">до ${u.slot.valid_until || '—'}</span>`
+          : '—';
+        return `<tr>
+          <td>${u.id}</td><td><b>+${u.phone}</b></td><td>${cars}</td><td>${slot}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-sm btn-acc" onclick="adminGrant(${u.id}, 1)">+1д</button>
+            <button class="btn btn-sm btn-ok" onclick="adminGrant(${u.id}, 30)">+30д</button>
+            ${u.slot ? `<button class="btn btn-sm btn-del" onclick="adminRevoke(${u.id})">×</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderQrs(botUser) {
+      const siteUrl = window.location.origin;
+      let html = `<div class="qr-item">
+        <img src="/api/qr?data=${encodeURIComponent(siteUrl)}" alt="QR Сайт" />
+        <b>Оплата парковки (Сайт)</b><br><small>${siteUrl}</small>
+      </div>`;
+      if (botUser) {
+        const botUrl = 'https://t.me/' + botUser.replace(/^@/, '');
+        html += `<div class="qr-item">
+          <img src="/api/qr?data=${encodeURIComponent(botUrl)}" alt="QR Бот" />
+          <b>Telegram-бот парковки</b><br><small>@${botUser.replace(/^@/, '')}</small>
+        </div>`;
+      }
+      document.getElementById('qr-box').innerHTML = html;
+    }
+
+    async function loadAdmin() {
+      const pass = getAdminPass();
+      const headers = {'X-Admin-Password': pass};
+      const [sRes, cfgRes, oRes, pRes, uRes, qRes, tRes] = await Promise.all([
+        fetch('/api/admin/stats', {headers}),
+        fetch('/api/settings'),
+        fetch('/api/admin/orders', {headers}),
+        fetch('/api/admin/promos', {headers}),
+        fetch('/api/admin/users', {headers}),
+        fetch('/api/admin/queue', {headers}),
+        fetch('/api/tariffs'),
+      ]);
+      if (!uRes.ok) { document.getElementById('adm-err').textContent = 'Неверный пароль'; return; }
+      localStorage.setItem('adm_pass', pass);
+      document.getElementById('admin-login').classList.add('hidden');
+      document.getElementById('admin-content').classList.remove('hidden');
+
+      const stats = await sRes.json();
+      document.getElementById('stat-slots').textContent = `${stats.slots_used} / ${stats.slots_total}`;
+      document.getElementById('stat-rev-day').textContent = `${stats.finance.today} ₽`;
+      document.getElementById('stat-rev-period').textContent = `${stats.finance.week} ₽ / ${stats.finance.month} ₽`;
+      document.getElementById('stat-worker').innerHTML = stats.worker_online
+        ? '<span style="color:var(--ok)">В сети</span>'
+        : '<span style="color:var(--danger)">Нет связи</span>';
+
+      const cfg = await cfgRes.json();
+      document.getElementById('set-sbp-phone').value = cfg.sbp_phone;
+      document.getElementById('set-sbp-bank').value = cfg.sbp_bank;
+      document.getElementById('set-sbp-rec').value = cfg.sbp_recipient;
+      document.getElementById('set-gate-phone').value = cfg.gate_phone;
+      document.getElementById('set-bot-user').value = cfg.bot_username;
+      renderQrs(cfg.bot_username);
+
+      const orders = await oRes.json();
+      const stLabels = {pending: 'создана', paid_by_user: 'оплачено клиентом', paid: 'подтверждена', rejected: 'отклонена'};
+      document.getElementById('orders-body').innerHTML = orders.map(o => `<tr>
+        <td>${o.id}</td>
+        <td><span style="color:var(--muted)">${o.created_at}</span></td>
+        <td><b>+${o.phone}</b><br><span style="color:var(--muted);font-size:12px;">${o.plates}</span></td>
+        <td>${o.tariff_name}${o.promo_code ? `<br><span style="color:var(--ok);font-size:11px;">${o.promo_code} (-${o.discount_percent}%)</span>` : ''}</td>
+        <td><b>${o.amount} ₽</b></td>
+        <td><span class="pill st-${o.status}">${stLabels[o.status] || o.status}</span></td>
+        <td style="white-space:nowrap;">${(o.status === 'pending' || o.status === 'paid_by_user') ? `
+          <button class="btn btn-sm btn-ok" onclick="confirmOrder(${o.id})">Ок</button>
+          <button class="btn btn-sm btn-del" onclick="rejectOrder(${o.id})">×</button>
+        ` : ''}</td>
+      </tr>`).join('');
+
+      const promos = await pRes.json();
+      document.getElementById('promos-body').innerHTML = promos.map(p => `<tr>
+        <td><input class="inline-inp" id="pc-${p.id}" value="${p.code}" style="width:140px;text-transform:uppercase;"></td>
+        <td><input class="inline-inp" id="pd-${p.id}" type="number" inputmode="numeric" value="${p.discount_percent}" style="width:80px;"></td>
+        <td><input class="inline-inp" id="pv-${p.id}" type="date" value="${p.valid_until}" style="width:145px;"></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-acc" onclick="savePromo(${p.id})">Сохранить</button>
+          <button class="btn btn-sm btn-del" onclick="deletePromo(${p.id})">×</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">Промокодов пока нет</td></tr>';
+
+      tariffs = await tRes.json();
+      renderClientTariffs();
+      document.getElementById('tariffs-body').innerHTML = tariffs.map(t => `<tr>
+        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name}" style="width:210px;"></td>
+        <td><input class="inline-inp" id="tp-${t.id}" type="number" inputmode="numeric" value="${t.price}" style="width:95px;"></td>
+        <td><input class="inline-inp" id="td-${t.id}" type="number" inputmode="numeric" value="${t.days}" style="width:70px;" ${t.is_night ? 'disabled' : ''}></td>
+        <td><button class="btn btn-sm btn-acc" onclick="saveTariff(${t.id}, ${t.is_night})">Сохранить</button></td>
+      </tr>`).join('');
+
+      allUsers = await uRes.json();
+      renderUsers();
+
+      const queue = await qRes.json();
+      document.getElementById('queue-body').innerHTML = queue.map(q => `<tr>
+        <td>${q.id}</td><td><span style="color:var(--muted)">${q.created_at}</span></td><td>${q.slot ? '#' + q.slot : '—'}</td>
+        <td><code>${q.command}</code></td><td><span class="pill st-${q.status}">${q.status}</span></td>
+      </tr>`).join('');
+    }
+
+    async function openGateNow() {
+      await fetch('/api/admin/open-gate', {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      const m = document.getElementById('quick-msg');
+      m.textContent = 'Команда открытия шлагбаума (CC) поставлена в очередь на модем.';
+      setTimeout(() => m.textContent = '', 3000);
+      loadAdmin();
+    }
+
+    async function backupNow() {
+      await fetch('/api/admin/backup-now', {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      const m = document.getElementById('quick-msg');
+      m.textContent = 'Файл базы данных отправлен вам в Telegram.';
+      setTimeout(() => m.textContent = '', 3000);
+    }
+
+    async function exportUsersCsv() {
+      const r = await fetch('/api/admin/export/users', {headers: {'X-Admin-Password': getAdminPass()}});
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'parking_users.csv';
+      a.click();
+    }
+
+    async function sendBroadcast() {
+      const inp = document.getElementById('bc-text');
+      const m = document.getElementById('bc-msg');
+      if (!inp.value.trim()) return;
+      const r = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({text: inp.value.trim()}),
+      });
+      const d = await r.json();
+      inp.value = '';
+      m.textContent = `Отправлено ${d.sent} пользователям.`;
+      setTimeout(() => m.textContent = '', 3000);
+    }
+
+    async function saveSettings() {
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          sbp_phone: document.getElementById('set-sbp-phone').value,
+          sbp_bank: document.getElementById('set-sbp-bank').value,
+          sbp_recipient: document.getElementById('set-sbp-rec').value,
+          gate_phone: document.getElementById('set-gate-phone').value,
+          bot_username: document.getElementById('set-bot-user').value,
+        }),
+      });
+      const m = document.getElementById('pay-set-msg');
+      m.textContent = 'Настройки сохранены';
+      setTimeout(() => m.textContent = '', 2000);
+      loadAdmin();
+    }
+
+    async function createPromo() {
+      const msg = document.getElementById('adm-promo-msg');
+      const body = {
+        code: document.getElementById('new-promo-code').value.trim(),
+        discount_percent: parseInt(document.getElementById('new-promo-disc').value, 10) || 0,
+        valid_until: document.getElementById('new-promo-date').value || null,
+      };
+      const r = await fetch('/api/admin/promos', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()}, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        document.getElementById('new-promo-code').value = '';
+        document.getElementById('new-promo-disc').value = '';
+        document.getElementById('new-promo-date').value = '';
+        msg.textContent = '';
+        loadAdmin();
+      } else {
+        msg.textContent = d.detail || 'Ошибка';
+        msg.className = 'msg err';
+      }
+    }
+
+    async function savePromo(id) {
+      await fetch(`/api/admin/promos/${id}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          code: document.getElementById(`pc-${id}`).value.trim(),
+          discount_percent: parseInt(document.getElementById(`pd-${id}`).value, 10) || 0,
+          valid_until: document.getElementById(`pv-${id}`).value || null,
+        }),
+      });
+      loadAdmin();
+    }
+
+    async function deletePromo(id) {
+      if (!confirm('Удалить промокод?')) return;
+      await fetch(`/api/admin/promos/${id}`, {method: 'DELETE', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function confirmOrder(id) {
+      await fetch(`/api/admin/orders/${id}/confirm`, {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function rejectOrder(id) {
+      await fetch(`/api/admin/orders/${id}/reject`, {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function adminGrant(userId, days) {
+      await fetch('/api/admin/grant', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({user_id: userId, days}),
+      });
+      loadAdmin();
+    }
+
+    async function saveTariff(id, isNight) {
+      await fetch(`/api/admin/tariffs/${id}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          name: document.getElementById(`tn-${id}`).value,
+          price: parseInt(document.getElementById(`tp-${id}`).value, 10),
+          days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
+          is_night: isNight,
+        }),
+      });
+      loadAdmin();
+    }
+
+    async function adminRevoke(userId) {
+      if (!confirm('Удалить номер из RTU5024?')) return;
+      await fetch('/api/admin/revoke', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({user_id: userId}),
+      });
+      loadAdmin();
+    }
+
+    loadTariffs();
+  </script>
+</body>
+</html>
+

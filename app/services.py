@@ -1,0 +1,338 @@
+﻿import re
+from datetime import datetime, timedelta
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.database import User, Vehicle, RtuSlot, SmsQueue, Tariff, Order, PromoCode, AppSetting
+
+
+def normalize_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    elif len(digits) == 10:
+        digits = "7" + digits
+    return digits
+
+
+def normalize_plate(plate: str) -> str:
+    return re.sub(r"\s+", "", plate).upper()
+
+
+def calc_valid_until(tariff: Tariff, current_until: datetime | None = None) -> datetime:
+    now = datetime.now()
+    if tariff.is_night:
+        if now.hour < 8:
+            return now.replace(hour=8, minute=0, second=0, microsecond=0)
+        return (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+
+    base = current_until if (current_until and current_until > now) else now
+    return base + timedelta(days=tariff.days)
+
+
+async def get_app_settings(session: AsyncSession) -> dict:
+    res = await session.execute(select(AppSetting))
+    data = {s.key: s.value for s in res.scalars().all()}
+    return {
+        "sbp_phone": data.get("sbp_phone", ""),
+        "sbp_bank": data.get("sbp_bank", ""),
+        "sbp_recipient": data.get("sbp_recipient", ""),
+        "gate_phone": data.get("gate_phone", settings.RTU_PHONE),
+        "bot_username": data.get("bot_username", ""),
+    }
+
+
+async def set_app_settings(session: AsyncSession, updates: dict):
+    for k, v in updates.items():
+        if v is None:
+            continue
+        row = await session.get(AppSetting, k)
+        if row:
+            row.value = str(v).strip()
+        else:
+            session.add(AppSetting(key=k, value=str(v).strip()))
+    await session.commit()
+
+
+async def validate_promo_code(session: AsyncSession, code: str) -> PromoCode:
+    norm_code = code.strip().upper()
+    res = await session.execute(
+        select(PromoCode).where(PromoCode.code == norm_code, PromoCode.is_active == True)
+    )
+    promo = res.scalar_one_or_none()
+    if not promo:
+        raise ValueError("Промокод не найден")
+    if promo.valid_until and promo.valid_until < datetime.now():
+        raise ValueError("Срок действия промокода истёк")
+    return promo
+
+
+async def register_user_and_car(
+    session: AsyncSession,
+    phone: str,
+    plate_number: str | None = None,
+    car_model: str | None = None,
+    full_name: str | None = None,
+    telegram_id: int | None = None,
+) -> User:
+    norm_phone = normalize_phone(phone)
+    res = await session.execute(
+        select(User)
+        .options(selectinload(User.vehicles), selectinload(User.slot))
+        .where(User.phone == norm_phone)
+    )
+    user = res.scalar_one_or_none()
+
+    if not user:
+        user = User(phone=norm_phone, full_name=full_name, telegram_id=telegram_id)
+        session.add(user)
+        await session.flush()
+    else:
+        if telegram_id and not user.telegram_id:
+            user.telegram_id = telegram_id
+        if full_name and not user.full_name:
+            user.full_name = full_name
+
+    if plate_number:
+        norm_plate = normalize_plate(plate_number)
+        existing = await session.execute(
+            select(Vehicle).where(Vehicle.user_id == user.id, Vehicle.plate_number == norm_plate)
+        )
+        if not existing.scalar_one_or_none():
+            session.add(Vehicle(user_id=user.id, plate_number=norm_plate, car_model=car_model))
+
+    await session.commit()
+    res = await session.execute(
+        select(User)
+        .options(selectinload(User.vehicles), selectinload(User.slot))
+        .where(User.id == user.id)
+    )
+    return res.scalar_one()
+
+
+async def create_order(
+    session: AsyncSession, user_id: int, tariff_id: int, promo_code: str | None = None
+) -> Order:
+    tariff = await session.get(Tariff, tariff_id)
+    if not tariff:
+        raise ValueError("Тариф не найден")
+
+    discount = 0
+    applied_code = None
+    if promo_code and promo_code.strip():
+        try:
+            promo = await validate_promo_code(session, promo_code)
+            discount = promo.discount_percent
+            applied_code = promo.code
+        except ValueError:
+            # Невалидный промокод не блокирует оплату
+            discount = 0
+            applied_code = None
+
+    final_amount = max(0, round(tariff.price * (100 - discount) / 100))
+    order = Order(
+        user_id=user_id,
+        tariff_id=tariff.id,
+        amount=final_amount,
+        promo_code=applied_code,
+        discount_percent=discount,
+        status="pending",
+    )
+    session.add(order)
+    await session.commit()
+    return order
+
+
+async def mark_order_paid_by_user(session: AsyncSession, order_id: int) -> Order:
+    res = await session.execute(
+        select(Order)
+        .options(selectinload(Order.user).selectinload(User.vehicles), selectinload(Order.tariff))
+        .where(Order.id == order_id)
+    )
+    order = res.scalar_one_or_none()
+    if not order:
+        raise ValueError("Заказ не найден")
+    if order.status == "pending":
+        order.status = "paid_by_user"
+        await session.commit()
+    return order
+
+
+async def reject_order(session: AsyncSession, order_id: int) -> Order:
+    res = await session.execute(
+        select(Order).options(selectinload(Order.user)).where(Order.id == order_id)
+    )
+    order = res.scalar_one_or_none()
+    if not order:
+        raise ValueError("Заказ не найден")
+    order.status = "rejected"
+    await session.commit()
+    return order
+
+
+async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Tariff) -> RtuSlot:
+    user = await session.get(User, user_id)
+    if not user:
+        raise ValueError("Пользователь не найден")
+
+    res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == user_id))
+    slot = res.scalar_one_or_none()
+
+    if slot:
+        slot.valid_until = calc_valid_until(tariff, slot.valid_until)
+        slot.notified_expiring = False
+        if slot.status != "active":
+            slot.status = "pending_add"
+            cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
+            session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
+    else:
+        free_res = await session.execute(
+            select(RtuSlot).where(RtuSlot.status == "free").order_by(RtuSlot.slot_number).limit(1)
+        )
+        slot = free_res.scalar_one_or_none()
+        if not slot:
+            raise ValueError("Нет свободных ячеек в RTU5024 (все 200 заняты)")
+
+        slot.user_id = user.id
+        slot.valid_until = calc_valid_until(tariff)
+        slot.notified_expiring = False
+        slot.status = "pending_add"
+        cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
+        session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
+
+    await session.commit()
+    return slot
+
+
+async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, User]:
+    res = await session.execute(
+        select(Order)
+        .options(selectinload(Order.tariff), selectinload(Order.user))
+        .where(Order.id == order_id)
+    )
+    order = res.scalar_one_or_none()
+    if not order:
+        raise ValueError("Заказ не найден")
+    if order.status == "paid":
+        raise ValueError("Заказ уже подтверждён")
+
+    order.status = "paid"
+    slot = await grant_access_by_tariff(session, order.user_id, order.tariff)
+    return slot, order.user
+
+
+async def grant_access_days(session: AsyncSession, user_id: int, days: int = 30) -> RtuSlot:
+    dummy = Tariff(code="custom", name=f"{days} дн.", price=0, days=days, is_night=False)
+    return await grant_access_by_tariff(session, user_id, dummy)
+
+
+async def revoke_access(session: AsyncSession, user_id: int) -> RtuSlot:
+    res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == user_id))
+    slot = res.scalar_one_or_none()
+    if not slot:
+        raise ValueError("У пользователя нет активной ячейки")
+
+    slot.status = "pending_del"
+    cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}##"
+    session.add(SmsQueue(slot_number=slot.slot_number, action="delete", command_text=cmd))
+    await session.commit()
+    return slot
+
+
+async def queue_open_gate(session: AsyncSession) -> SmsQueue:
+    """Ставит в очередь SMS-команду принудительного открытия реле RTU5024."""
+    cmd = f"{settings.RTU_PASSWORD}CC"
+    task = SmsQueue(slot_number=None, action="open", command_text=cmd)
+    session.add(task)
+    await session.commit()
+    return task
+
+
+async def get_finance_stats(session: AsyncSession) -> dict:
+    now = datetime.utcnow()
+    day_ago = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    async def sum_since(dt: datetime) -> int:
+        val = (await session.execute(
+            select(func.coalesce(func.sum(Order.amount), 0))
+            .where(Order.status == "paid", Order.created_at >= dt)
+        )).scalar()
+        return int(val or 0)
+
+    return {
+        "today": await sum_since(day_ago),
+        "week": await sum_since(week_ago),
+        "month": await sum_since(month_ago),
+    }
+
+
+async def process_expired_slots(session: AsyncSession) -> int:
+    now = datetime.now()
+    res = await session.execute(
+        select(RtuSlot).where(RtuSlot.status == "active", RtuSlot.valid_until != None, RtuSlot.valid_until <= now)
+    )
+    expired = res.scalars().all()
+    for slot in expired:
+        slot.status = "pending_del"
+        cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}##"
+        session.add(SmsQueue(slot_number=slot.slot_number, action="delete", command_text=cmd))
+    if expired:
+        await session.commit()
+    return len(expired)
+
+
+async def pop_expiring_slots(session: AsyncSession) -> list[tuple[int, datetime]]:
+    now = datetime.now()
+    soon = now + timedelta(hours=24)
+    res = await session.execute(
+        select(RtuSlot)
+        .options(selectinload(RtuSlot.user))
+        .where(
+            RtuSlot.status == "active",
+            RtuSlot.notified_expiring == False,
+            RtuSlot.valid_until != None,
+            RtuSlot.valid_until > now,
+            RtuSlot.valid_until <= soon,
+        )
+    )
+    slots = res.scalars().all()
+    to_notify = []
+    for s in slots:
+        s.notified_expiring = True
+        if s.user and s.user.telegram_id:
+            to_notify.append((s.user.telegram_id, s.valid_until))
+    if slots:
+        await session.commit()
+    return to_notify
+
+
+async def get_next_sms_task(session: AsyncSession) -> SmsQueue | None:
+    res = await session.execute(
+        select(SmsQueue).where(SmsQueue.status == "pending").order_by(SmsQueue.id).limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
+async def report_sms_task(session: AsyncSession, task_id: int, status: str, error_msg: str | None = None):
+    task = await session.get(SmsQueue, task_id)
+    if not task:
+        return
+    task.status = status
+    task.error_msg = error_msg
+
+    if task.slot_number and status == "sent":
+        slot = await session.get(RtuSlot, task.slot_number)
+        if slot:
+            if task.action == "add":
+                slot.status = "active"
+            elif task.action == "delete":
+                slot.status = "free"
+                slot.user_id = None
+                slot.valid_until = None
+                slot.notified_expiring = False
+
+    await session.commit()
