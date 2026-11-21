@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Парковка" />
   <link rel="manifest" href="/manifest.json" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <title>Парковка — Доступ к шлагбауму</title>
   <style>
     :root {
@@ -119,6 +120,9 @@
       border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent);
     }
     .t-name { font-size: 13px; font-weight: 500; }
+    .t-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; width: 100%; max-width: 420px; box-shadow: 0 12px 32px rgba(0,0,0,0.25); }
     .t-price { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; margin-left: 8px; text-align: right; }
     .t-old { font-size: 11px; color: var(--muted); text-decoration: line-through; font-weight: 400; display: block; }
 
@@ -246,6 +250,9 @@
           </div>
           <button class="btn btn-primary" onclick="checkStatus()">Показать статус</button>
           <div id="chk-result"></div>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">?????? / ???????? ??????????????</button>
+          </div>
         </div>
       </div>
     </section>
@@ -388,6 +395,26 @@
     </section>
   </main>
 
+
+  <div id="help-modal" class="modal-bg hidden" onclick="if(event.target===this) closeHelpModal()">
+    <div class="modal-card">
+      <div class="card-head">
+        <h2>???????? ??????????????</h2>
+        <button class="btn btn-sm btn-secondary" onclick="closeHelpModal()">?</button>
+      </div>
+      <div class="field">
+        <label>??? ??????? (???? ??????? ?? ????? Telegram)</label>
+        <input id="help-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+      </div>
+      <div class="field">
+        <label>?????????</label>
+        <textarea id="help-text" rows="4" placeholder="??????? ??? ??????..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="sendSupport(this)">?????????</button>
+      <div id="help-msg" class="msg"></div>
+    </div>
+  </div>
+
   <script>
     let tariffs = [];
     let allUsers = [];
@@ -437,7 +464,7 @@
         const priceHtml = disc ? `<span class="t-old">${t.price} ₽</span>${finalPrice} ₽` : `${t.price} ₽`;
         return `
           <div class="tariff-card ${t.id === selectedTariffId ? 'selected' : ''}" onclick="selectTariff(${t.id})">
-            <span class="t-name">${t.name}</span>
+            <div><div class="t-name">${t.name}</div>${t.description ? `<div class="t-desc">${t.description}</div>` : ''}</div>
             <span class="t-price">${priceHtml}</span>
           </div>
         `;
@@ -655,7 +682,8 @@
       tariffs = await tRes.json();
       renderClientTariffs();
       document.getElementById('tariffs-body').innerHTML = tariffs.map(t => `<tr>
-        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name}" style="width:210px;"></td>
+        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name}" style="width:180px;"></td>
+        <td><input class="inline-inp" id="tdesc-${t.id}" value="${(t.description || '').replace(/"/g, '&quot;')}" placeholder="???. ??????? / ???????" style="width:220px;"></td>
         <td><input class="inline-inp" id="tp-${t.id}" type="number" inputmode="numeric" value="${t.price}" style="width:95px;"></td>
         <td><input class="inline-inp" id="td-${t.id}" type="number" inputmode="numeric" value="${t.days}" style="width:70px;" ${t.is_night ? 'disabled' : ''}></td>
         <td><button class="btn btn-sm btn-acc" onclick="saveTariff(${t.id}, ${t.is_night})">Сохранить</button></td>
@@ -795,6 +823,7 @@
           price: parseInt(document.getElementById(`tp-${id}`).value, 10),
           days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
           is_night: isNight,
+          description: document.getElementById(`tdesc-${id}`).value.trim(),
         }),
       });
       loadAdmin();
@@ -807,6 +836,46 @@
         body: JSON.stringify({user_id: userId}),
       });
       loadAdmin();
+    }
+
+    
+    function openHelpModal() {
+      const ph = document.getElementById('chk-phone').value || document.getElementById('reg-phone').value || '';
+      if (ph && !document.getElementById('help-phone').value) document.getElementById('help-phone').value = ph;
+      document.getElementById('help-msg').textContent = '';
+      document.getElementById('help-modal').classList.remove('hidden');
+    }
+    function closeHelpModal() {
+      document.getElementById('help-modal').classList.add('hidden');
+    }
+    async function sendSupport(btn) {
+      const text = document.getElementById('help-text').value.trim();
+      const phone = document.getElementById('help-phone').value.trim();
+      const msg = document.getElementById('help-msg');
+      if (!text) { msg.textContent = '??????? ????? ?????????.'; msg.className = 'msg err'; return; }
+      const tgUser = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe ? window.Telegram.WebApp.initDataUnsafe.user : null;
+      btn.disabled = true;
+      const r = await fetch('/api/support', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          text,
+          phone: phone || null,
+          telegram_id: tgUser ? tgUser.id : null,
+          full_name: tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : null,
+        }),
+      });
+      btn.disabled = false;
+      if (r.ok) {
+        document.getElementById('help-text').value = '';
+        msg.textContent = '????????? ?????????? ??????????????!';
+        msg.className = 'msg ok';
+        setTimeout(closeHelpModal, 1500);
+      } else {
+        const d = await r.json();
+        msg.textContent = d.detail || '?????? ????????';
+        msg.className = 'msg err';
+      }
     }
 
     loadTariffs();

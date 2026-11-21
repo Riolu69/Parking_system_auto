@@ -1,6 +1,6 @@
-﻿from datetime import datetime
+from datetime import datetime
 from sqlalchemy import (
-    BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text, select
+    BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text, select, text
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -32,6 +32,7 @@ class Tariff(Base):
     days = Column(Integer, default=0)
     is_night = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    description = Column(Text, default="", nullable=False)
 
 
 class PromoCode(Base):
@@ -134,6 +135,9 @@ DEFAULT_SETTINGS = {
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(tariffs)"))).fetchall()]
+        if "description" not in cols:
+            await conn.execute(text("ALTER TABLE tariffs ADD COLUMN description TEXT DEFAULT ''"))
 
     async with async_session() as session:
         if (await session.execute(select(RtuSlot.slot_number).limit(1))).scalar() is None:

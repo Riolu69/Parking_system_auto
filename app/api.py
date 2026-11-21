@@ -1,4 +1,4 @@
-﻿import segno
+import segno
 import asyncio
 import csv
 import io
@@ -23,7 +23,7 @@ from app.services import (
 )
 from app.bot import (
     bot, dp, notify_admins_order, notify_user_activated,
-    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users
+    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users, notify_admins_support
 )
 
 logger = logging.getLogger("uvicorn")
@@ -135,6 +135,14 @@ class TariffUpdateReq(BaseModel):
     price: int
     days: int
     is_night: bool = False
+    description: str = ""
+
+
+class SupportReq(BaseModel):
+    text: str
+    phone: str | None = None
+    telegram_id: int | None = None
+    full_name: str | None = None
 
 
 class PromoReq(BaseModel):
@@ -206,7 +214,7 @@ async def api_tariffs():
     async with async_session() as session:
         res = await session.execute(select(Tariff).where(Tariff.is_active == True).order_by(Tariff.id))
         return [
-            {"id": t.id, "code": t.code, "name": t.name, "price": t.price, "days": t.days, "is_night": t.is_night}
+            {"id": t.id, "code": t.code, "name": t.name, "price": t.price, "days": t.days, "is_night": t.is_night, "description": t.description or ""}
             for t in res.scalars().all()
         ]
 
@@ -289,6 +297,32 @@ async def api_status(phone: str):
         }
 
 
+
+
+@app.post("/api/support")
+async def api_support(data: SupportReq):
+    txt = data.text.strip()
+    if not txt:
+        raise HTTPException(status_code=400, detail="??????? ????? ?????????")
+    tg_id = data.telegram_id
+    phone = normalize_phone(data.phone) if data.phone else ""
+    full_name = data.full_name or ""
+    async with async_session() as session:
+        user = None
+        if tg_id:
+            res = await session.execute(select(User).where(User.telegram_id == tg_id))
+            user = res.scalar_one_or_none()
+        elif phone:
+            res = await session.execute(select(User).where(User.phone == phone))
+            user = res.scalar_one_or_none()
+        if user:
+            tg_id = tg_id or user.telegram_id
+            phone = phone or user.phone
+            full_name = full_name or (user.full_name or "")
+    await notify_admins_support(text=txt, user_tg_id=tg_id, phone=phone, full_name=full_name)
+    return {"ok": True}
+
+
 @app.get("/api/admin/stats", dependencies=[Depends(verify_admin)])
 async def admin_stats():
     async with async_session() as session:
@@ -362,6 +396,7 @@ async def admin_update_tariff(tariff_id: int, data: TariffUpdateReq):
         t.price = data.price
         t.days = data.days
         t.is_night = data.is_night
+        t.description = data.description
         await session.commit()
         return {"ok": True}
 

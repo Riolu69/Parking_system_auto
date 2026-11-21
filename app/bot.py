@@ -1,4 +1,4 @@
-﻿import os
+import os
 import logging
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
@@ -29,6 +29,11 @@ class RegState(StatesGroup):
     waiting_plate = State()
     waiting_model = State()
     waiting_promo = State()
+    waiting_support = State()
+
+
+class AdminState(StatesGroup):
+    waiting_reply = State()
 
 
 def kb_contact():
@@ -410,3 +415,81 @@ async def cmd_broadcast(message: Message):
         return
     count = await broadcast_to_users(text)
     await message.answer(f"Рассылка отправлена {count} пользователям.")
+
+
+async def notify_admins_support(text: str, user_tg_id: int | None = None, phone: str = "", full_name: str = ""):
+    who = []
+    if full_name:
+        who.append(full_name)
+    if phone:
+        who.append(f"+{phone}")
+    if user_tg_id:
+        who.append(f"ID: {user_tg_id}")
+    header = " ? ".join(who) or "????? ? ?????"
+    msg_text = f"????????? ? ?????????\n??: {header}\n\n{text}"
+    kb = None
+    if user_tg_id:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="????????", callback_data=f"sup_reply:{user_tg_id}")
+        ]])
+    for aid in settings.admin_ids:
+        try:
+            await bot.send_message(aid, msg_text, reply_markup=kb)
+        except Exception as e:
+            logger.error(f"?????? ???????? ????????? ?????? {aid}: {e}")
+
+
+@dp.message(F.text == "??????")
+async def help_start(message: Message, state: FSMContext):
+    await state.set_state(RegState.waiting_support)
+    await message.answer("???????? ??? ?????? ?????????????? (??? ????????? ????????):")
+
+
+@dp.message(RegState.waiting_support)
+async def process_support(message: Message, state: FSMContext):
+    txt = (message.text or "").strip()
+    await state.set_state(None)
+    if not txt or txt.lower() == "??????":
+        await message.answer("????????.", reply_markup=kb_main())
+        return
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == message.from_user.id))
+        user = res.scalar_one_or_none()
+    await notify_admins_support(
+        text=txt,
+        user_tg_id=message.from_user.id,
+        phone=user.phone if user else "",
+        full_name=message.from_user.full_name or (user.full_name if user else ""),
+    )
+    await message.answer("????????? ?????????? ??????????????. ???????? ????? ????? ? ????!", reply_markup=kb_main())
+
+
+@dp.callback_query(F.data.startswith("sup_reply:"))
+async def on_admin_support_reply(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in settings.admin_ids:
+        await callback.answer("??? ???????", show_alert=True)
+        return
+    target_tg_id = int(callback.data.split(":")[1])
+    await state.update_data(reply_target_tg_id=target_tg_id)
+    await state.set_state(AdminState.waiting_reply)
+    await callback.message.answer(f"??????? ????? ???????????? (ID {target_tg_id}) ??? ????????:")
+    await callback.answer()
+
+
+@dp.message(AdminState.waiting_reply)
+async def process_admin_reply(message: Message, state: FSMContext):
+    if message.from_user.id not in settings.admin_ids:
+        await state.set_state(None)
+        return
+    txt = (message.text or "").strip()
+    data = await state.get_data()
+    target_tg_id = data.get("reply_target_tg_id")
+    await state.set_state(None)
+    if not txt or txt.lower() == "??????" or not target_tg_id:
+        await message.answer("????? ???????.")
+        return
+    try:
+        await bot.send_message(target_tg_id, f"????? ??????????????:\n\n{txt}")
+        await message.answer("????? ????????? ????????????.")
+    except Exception as e:
+        await message.answer(f"?? ??????? ????????? ?????: {e}")
