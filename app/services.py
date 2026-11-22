@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import User, Vehicle, RtuSlot, SmsQueue, Tariff, Order, PromoCode, AppSetting
+from app.database import User, Vehicle, RtuSlot, SmsQueue, Tariff, Order, PromoCode, AppSetting, ExtraService, ServiceOrder
 
 
 def normalize_phone(phone: str) -> str:
@@ -175,7 +175,7 @@ async def register_user_and_car(
 
 
 async def create_order(
-    session: AsyncSession, user_id: int, tariff_id: int, promo_code: str | None = None
+    session: AsyncSession, user_id: int, tariff_id: int, promo_code: str | None = None, vehicle_id: int | None = None
 ) -> Order:
     tariff = await session.get(Tariff, tariff_id)
     if not tariff:
@@ -197,6 +197,7 @@ async def create_order(
     order = Order(
         user_id=user_id,
         tariff_id=tariff.id,
+        vehicle_id=vehicle_id,
         amount=final_amount,
         promo_code=applied_code,
         discount_percent=discount,
@@ -210,7 +211,7 @@ async def create_order(
 async def mark_order_paid_by_user(session: AsyncSession, order_id: int) -> Order:
     res = await session.execute(
         select(Order)
-        .options(selectinload(Order.user).selectinload(User.vehicles), selectinload(Order.tariff))
+        .options(selectinload(Order.user).selectinload(User.vehicles), selectinload(Order.tariff), selectinload(Order.vehicle))
         .where(Order.id == order_id)
     )
     order = res.scalar_one_or_none()
@@ -234,6 +235,58 @@ async def reject_order(session: AsyncSession, order_id: int) -> Order:
     return order
 
 
+
+
+async def _pick_next_free_spot(session: AsyncSession, preferred_spot: str | None = None) -> str:
+    clean = (preferred_spot or "").strip()
+    res = await session.execute(select(RtuSlot.spot_label).where(RtuSlot.spot_label != None))
+    taken = {str(r[0]).strip().lower() for r in res.all() if r[0]}
+    if clean and clean.lower() not in taken:
+        return clean
+    for i in range(1, 201):
+        cand = str(i)
+        if cand.lower() not in taken:
+            return cand
+    return f"M-{int(datetime.utcnow().timestamp()) % 1000}"
+
+
+async def assign_spot_to_user(session: AsyncSession, user_id: int, spot_label: str | None = None) -> RtuSlot:
+    res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == user_id))
+    slot = res.scalar_one_or_none()
+    chosen = await _pick_next_free_spot(session, spot_label)
+    if slot:
+        slot.spot_label = chosen
+        await session.commit()
+        return slot
+
+    free_res = await session.execute(
+        select(RtuSlot).where(RtuSlot.status == "free").order_by(RtuSlot.slot_number).limit(1)
+    )
+    free_slot = free_res.scalar_one_or_none()
+    if free_slot:
+        free_slot.user_id = user_id
+        free_slot.spot_label = chosen
+        await session.commit()
+        return free_slot
+
+    raise ValueError("Нет свободных ячеек для привязки места")
+
+
+
+
+async def backfill_spots(session: AsyncSession) -> int:
+    res = await session.execute(select(RtuSlot).where(RtuSlot.user_id != None, RtuSlot.status != "free").order_by(RtuSlot.slot_number))
+    slots = res.scalars().all()
+    updated = 0
+    for s in slots:
+        if not s.spot_label:
+            s.spot_label = await _pick_next_free_spot(session)
+            updated += 1
+    if updated:
+        await session.commit()
+    return updated
+
+
 async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Tariff) -> RtuSlot:
     user = await session.get(User, user_id)
     if not user:
@@ -243,6 +296,8 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
     slot = res.scalar_one_or_none()
 
     if slot:
+        if not slot.spot_label:
+            slot.spot_label = await _pick_next_free_spot(session)
         slot.valid_until = calc_valid_until(tariff, slot.valid_until)
         slot.notified_expiring = False
         if slot.status != "active":
@@ -258,6 +313,8 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
             raise ValueError("Нет свободных ячеек в RTU5024 (все 200 заняты)")
 
         slot.user_id = user.id
+        if not slot.spot_label:
+            slot.spot_label = await _pick_next_free_spot(session)
         slot.valid_until = calc_valid_until(tariff)
         slot.notified_expiring = False
         slot.status = "pending_add"
@@ -271,7 +328,7 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
 async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, User]:
     res = await session.execute(
         select(Order)
-        .options(selectinload(Order.tariff), selectinload(Order.user))
+        .options(selectinload(Order.tariff), selectinload(Order.user), selectinload(Order.vehicle))
         .where(Order.id == order_id)
     )
     order = res.scalar_one_or_none()
@@ -281,7 +338,19 @@ async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, 
         raise ValueError("Заказ уже подтверждён")
 
     order.status = "paid"
+    target_until = None
+    if order.vehicle:
+        order.vehicle.valid_until = calc_valid_until(order.tariff, order.vehicle.valid_until)
+        target_until = order.vehicle.valid_until
     slot = await grant_access_by_tariff(session, order.user_id, order.tariff)
+    if target_until:
+        v_res = await session.execute(select(func.max(Vehicle.valid_until)).where(Vehicle.user_id == order.user_id))
+        max_v_until = v_res.scalar()
+        if max_v_until and (not slot.valid_until or max_v_until > slot.valid_until):
+            slot.valid_until = max_v_until
+        elif target_until and (not slot.valid_until or target_until > slot.valid_until):
+            slot.valid_until = target_until
+        await session.commit()
     return slot, order.user
 
 
@@ -313,17 +382,21 @@ async def queue_open_gate(session: AsyncSession) -> SmsQueue:
 
 
 async def get_finance_stats(session: AsyncSession) -> dict:
-    now = datetime.utcnow()
+    now = datetime.now()
     day_ago = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
     async def sum_since(dt: datetime) -> int:
-        val = (await session.execute(
+        val_orders = (await session.execute(
             select(func.coalesce(func.sum(Order.amount), 0))
             .where(Order.status == "paid", Order.created_at >= dt)
-        )).scalar()
-        return int(val or 0)
+        )).scalar() or 0
+        val_svc = (await session.execute(
+            select(func.coalesce(func.sum(ServiceOrder.amount), 0))
+            .where(ServiceOrder.status == "paid", ServiceOrder.created_at >= dt)
+        )).scalar() or 0
+        return int(val_orders) + int(val_svc)
 
     return {
         "today": await sum_since(day_ago),
@@ -398,3 +471,56 @@ async def report_sms_task(session: AsyncSession, task_id: int, status: str, erro
                 slot.notified_expiring = False
 
     await session.commit()
+
+
+async def list_extra_services(session: AsyncSession, only_active: bool = True) -> list[ExtraService]:
+    stmt = select(ExtraService).order_by(ExtraService.id)
+    if only_active:
+        stmt = stmt.where(ExtraService.is_active == True)
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def create_service_order(
+    session: AsyncSession,
+    service_id: int,
+    phone: str,
+    spot: str,
+    comment: str = "",
+) -> ServiceOrder:
+    svc = await session.get(ExtraService, service_id)
+    if not svc or not svc.is_active:
+        raise ValueError("Услуга не найдена или неактивна")
+    norm_phone = normalize_phone(phone)
+    if not norm_phone:
+        raise ValueError("Укажите корректный номер телефона")
+    clean_spot = (spot or "").strip()
+    if not clean_spot:
+        raise ValueError("Укажите парковочное место")
+    order = ServiceOrder(
+        service_id=svc.id,
+        phone=norm_phone,
+        spot=clean_spot,
+        comment=(comment or "").strip(),
+        amount=max(0, int(svc.price)),
+        status="pending",
+    )
+    session.add(order)
+    await session.commit()
+    res = await session.execute(
+        select(ServiceOrder).options(selectinload(ServiceOrder.service)).where(ServiceOrder.id == order.id)
+    )
+    return res.scalar_one()
+
+
+async def mark_service_order_paid(session: AsyncSession, order_id: int) -> ServiceOrder:
+    res = await session.execute(
+        select(ServiceOrder).options(selectinload(ServiceOrder.service)).where(ServiceOrder.id == order_id)
+    )
+    order = res.scalar_one_or_none()
+    if not order:
+        raise ValueError("Заказ допуслуги не найден")
+    if order.status == "pending":
+        order.status = "paid_by_user"
+        await session.commit()
+    return order

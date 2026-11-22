@@ -1,0 +1,2693 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Парковка" />
+  <link rel="manifest" href="/manifest.json" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <title>Парковка — Доступ к парковке</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e6e6ea; --surface: rgba(255, 255, 255, 0.74); --card: #ffffff; --card-elev: #f2f2f5;
+      --text: #1d1d1f; --muted: #6e6e73; --border: rgba(0, 0, 0, 0.06); --border-strong: rgba(0, 0, 0, 0.14);
+      --accent: #0a84ff; --accent-hover: #0071e3; --accent-soft: rgba(10, 132, 255, 0.12);
+      --ok: #248a3d; --ok-bright: #34c759; --ok-soft: rgba(48, 209, 88, 0.14);
+      --warn: #b25000; --warn-soft: rgba(255, 159, 10, 0.15);
+      --danger: #d70015; --danger-soft: rgba(255, 69, 58, 0.12);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-h: 0 18px 40px rgba(0, 0, 0, 0.12);
+      --seg-bg: rgba(118, 118, 128, 0.14); --seg-active: #ffffff;
+      --toggle-off: rgba(120, 120, 128, 0.24);
+      --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25L6 7.75L9.5 4.25' stroke='%236e6e73' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      --ease: cubic-bezier(.16, 1, .3, 1);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #000000; --surface: rgba(28, 28, 30, 0.74); --card: #1c1c1e; --card-elev: #2c2c2e;
+        --text: #f5f5f7; --muted: #a1a1a6; --border: rgba(255, 255, 255, 0.08); --border-strong: rgba(255, 255, 255, 0.18);
+        --accent: #0a84ff; --accent-hover: #409cff; --accent-soft: rgba(10, 132, 255, 0.2);
+        --ok: #30d158; --ok-bright: #30d158; --ok-soft: rgba(48, 209, 88, 0.16);
+        --warn: #ff9f0a; --warn-soft: rgba(255, 159, 10, 0.16);
+        --danger: #ff453a; --danger-soft: rgba(255, 69, 58, 0.16);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        --shadow-h: 0 18px 40px rgba(0, 0, 0, 0.65);
+        --seg-bg: rgba(118, 118, 128, 0.26); --seg-active: #3a3a3c;
+        --toggle-off: rgba(120, 120, 128, 0.36);
+        --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25L6 7.75L9.5 4.25' stroke='%23a1a1a6' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Прогресс-бар прокрутки */
+    .prog {
+      position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60;
+      transform-origin: 0 50%; transform: scaleX(0);
+      background: linear-gradient(90deg, #0a84ff, #38bdf8, #0071e3);
+    }
+
+    /* Шапка */
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    max-width: 1160px; margin: 0 auto; }
+    .topbar-inner {
+      max-width: 1200px; margin: 0 auto; padding: 12px 20px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.03em; }
+    .brand-dot {
+      width: 28px; height: 28px; border-radius: 9px;
+      background: linear-gradient(145deg, #0a84ff, #0071e3); color: #fff;
+      display: grid; place-items: center; font-size: 14px; font-weight: 800;
+      box-shadow: 0 4px 12px rgba(10, 132, 255, 0.35);
+    }
+    .segmented { display: inline-flex; background: var(--seg-bg); padding: 4px; border-radius: 99px; gap: 2px; }
+    .seg-btn {
+      border: none; background: transparent; color: var(--muted); padding: 6px 16px;
+      border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.28s var(--ease);
+    }
+    .seg-btn:hover:not(.active) { color: var(--text); }
+    .seg-btn.active { background: var(--seg-active); color: var(--text); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }
+
+    /* Контейнер и Hero */
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px clamp(12px, 2.5vw, 24px) 48px; }
+    .hero {
+      background: linear-gradient(155deg, var(--card), var(--card-elev));
+      border-radius: 26px; padding: 26px 24px; margin-bottom: 14px;
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .hero h1 { font-size: clamp(24px, 3.6vw, 38px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.06; }
+    .hero p { color: var(--muted); font-size: 15px; margin-top: 6px; max-width: 46ch; }
+    .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .h-badge {
+      padding: 7px 14px; border-radius: 99px; font-size: 12px; font-weight: 600;
+      background: var(--card-elev); color: var(--text); border: 1px solid var(--border);
+    }
+    .h-badge.acc { background: linear-gradient(135deg, #0a84ff, #0071e3); color: #fff; border: none; }
+
+    .grid-2 { display: grid; grid-template-columns: 1.38fr 1fr; gap: 14px; align-items: start; }
+    @media (max-width: 820px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* Bento-статистика */
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .stat-tile {
+      background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+      padding: 18px 20px; box-shadow: var(--shadow);
+      transition: transform 0.45s var(--ease), box-shadow 0.45s var(--ease);
+    }
+    .stat-tile:hover { transform: translate3d(0, -4px, 0) scale(1.015); box-shadow: var(--shadow-h); }
+    .stat-tile:first-child { background: linear-gradient(155deg, #0a84ff, #5e5ce6); color: #fff; border: none; }
+    .stat-tile:first-child .stat-label { color: rgba(255, 255, 255, 0.78); }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+    .stat-val { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    /* Карточки */
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 26px;
+      padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 14px;
+      transition: box-shadow 0.45s var(--ease);
+    }
+    .card:hover { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
+    .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+    .card h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.025em; }
+    .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 540px) { .fields-row { grid-template-columns: 1fr; } }
+
+    /* Поля ввода, селекты и даты в стиле Apple */
+    .field { margin-bottom: 12px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+    input, textarea, select {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 14px;
+      background: var(--card-elev); color: var(--text); font-size: 14px; outline: none; font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    input:hover, textarea:hover, select:hover { border-color: var(--border-strong); }
+    input:not([type="checkbox"]):focus, textarea:focus, select:focus {
+      border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    /* Убираем стандартные стрелки у number */
+    input[type="number"] { font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* Кастомный Select (выпадающие меню) */
+    select {
+      appearance: none; -webkit-appearance: none; cursor: pointer;
+      padding-right: 34px;
+      background-image: var(--chevron);
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px 12px;
+    }
+    select option { background: var(--card); color: var(--text); }
+
+    /* Кастомный выбор даты */
+    input[type="date"] {
+      font-variant-numeric: tabular-nums; cursor: pointer; min-height: 38px;
+      padding-right: 10px;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      cursor: pointer; opacity: 0.65; border-radius: 6px; padding: 3px;
+      transition: opacity 0.2s, background 0.2s;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator:hover {
+      opacity: 1; background: var(--accent-soft);
+    }
+
+    /* iOS-тумблеры для чекбоксов в таблицах (Вкл/Выкл) */
+    td > input[type="checkbox"] {
+      appearance: none; -webkit-appearance: none;
+      width: 38px !important; height: 22px !important; padding: 0 !important;
+      border-radius: 99px !important; border: none !important;
+      background: var(--toggle-off) !important;
+      position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
+      transition: background 0.3s var(--ease), box-shadow 0.2s;
+    }
+    td > input[type="checkbox"]::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%; background: #ffffff;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.24);
+      transition: transform 0.32s var(--ease);
+    }
+    td > input[type="checkbox"]:checked { background: var(--ok-bright) !important; }
+    td > input[type="checkbox"]:checked::after { transform: translateX(16px); }
+    td > input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 4px var(--accent-soft); }
+
+    /* Интерактивные чипы-пилюли для выбора тарифов в промокодах */
+    .chk-wrap { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; align-items: center; }
+    .chk-lbl {
+      display: inline-flex; align-items: center; gap: 5px; position: relative;
+      background: var(--card-elev); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: 99px; cursor: pointer; margin: 0;
+      color: var(--muted); font-weight: 600; font-size: 12px; user-select: none;
+      transition: all 0.22s var(--ease);
+    }
+    .chk-lbl:hover { border-color: var(--border-strong); color: var(--text); }
+    .chk-lbl input[type="checkbox"] {
+      position: absolute; opacity: 0; width: 0 !important; height: 0 !important; pointer-events: none;
+    }
+    .chk-lbl:has(input:checked) {
+      background: var(--accent); border-color: transparent; color: #ffffff;
+      box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+    }
+
+    /* Превью госномера */
+    .plate-preview {
+      display: inline-flex; align-items: stretch; border: 2px solid #1d1d1f; border-radius: 9px;
+      background: #ffffff; color: #1d1d1f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 800; overflow: hidden; margin-top: 8px; height: 36px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+    .plate-main { padding: 0 11px; display: flex; align-items: center; font-size: 16px; letter-spacing: 1px; }
+    .plate-reg {
+      border-left: 2px solid #1d1d1f; padding: 0 8px; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; line-height: 1; font-size: 12px; min-width: 40px;
+    }
+    .plate-rus { font-size: 7px; font-weight: 700; margin-top: 2px; }
+
+    .promo-row { display: flex; gap: 8px; }
+    .promo-row input { flex: 1; text-transform: uppercase; }
+    .promo-row button { flex-shrink: 0; }
+
+    /* Карточки тарифов у клиента */
+    .tariff-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 6px; }
+    @media (max-width: 540px) { .tariff-grid { grid-template-columns: 1fr; } }
+    .tariff-card {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 13px 15px; border-radius: 18px; border: 1px solid var(--border);
+      background: var(--card-elev); cursor: pointer;
+      transition: transform 0.35s var(--ease), border-color 0.2s, background 0.2s, box-shadow 0.35s var(--ease);
+    }
+    .tariff-card:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06); }
+    .tariff-card.selected {
+      border-color: var(--accent); background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1.5px var(--accent), 0 8px 20px rgba(10, 132, 255, 0.14);
+    }
+    .t-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+    .t-desc { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+    .t-price { font-size: 16px; font-weight: 800; color: var(--accent); white-space: nowrap; margin-left: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+    .t-old { font-size: 11px; color: var(--muted); text-decoration: line-through; font-weight: 500; display: block; }
+
+    /* Кнопки */
+    .btn {
+      display: inline-flex; justify-content: center; align-items: center; border: none; text-decoration: none;
+      border-radius: 99px; padding: 10px 18px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), background 0.2s, color 0.2s; gap: 6px;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary {
+      width: 100%; background: linear-gradient(135deg, #0a84ff, #0071e3); color: #fff; margin-top: 8px;
+      box-shadow: 0 6px 18px rgba(10, 132, 255, 0.28);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(10, 132, 255, 0.42); }
+    .btn-secondary { background: var(--seg-bg); color: var(--text); padding: 9px 16px; }
+    .btn-secondary:hover { background: var(--border-strong); }
+    .btn-sm { padding: 6px 13px; font-size: 12px; color: #fff; }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-ok:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-acc { background: var(--card-elev); color: var(--text); border: 1px solid var(--border); }
+    .btn-acc:hover { background: var(--accent); color: #fff; border-color: transparent; }
+    .btn-del { width: 30px; height: 30px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid transparent; font-size: 15px; }
+    .btn-del:hover { background: var(--danger); color: #fff; }
+
+    .msg { margin-top: 8px; font-size: 13px; font-weight: 500; }
+    .msg.ok { color: var(--ok); }
+    .msg.err { color: var(--danger); }
+    .msg.warn { color: var(--warn); }
+
+    .pay-sheet {
+      margin-top: 14px; padding: 16px; border-radius: 18px;
+      background: var(--accent-soft); border: 1px solid var(--accent); font-size: 13px;
+    }
+    .pay-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .status-box {
+      margin-top: 12px; padding: 16px; border-radius: 18px;
+      background: var(--card-elev); border: 1px solid var(--border); font-size: 13px;
+    }
+    .hidden { display: none !important; }
+
+    /* Модальные окна с пружинной анимацией */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes modalPop { from { opacity: 0; transform: scale(0.94) translateY(12px); } to { opacity: 1; transform: none; } }
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px); z-index: 50; display: flex; align-items: center; justify-content: center;
+      padding: 16px; animation: fadeIn 0.2s var(--ease);
+    }
+    .modal-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 26px;
+      padding: 22px; width: 100%; max-width: 440px; box-shadow: 0 24px 54px rgba(0, 0, 0, 0.32);
+      animation: modalPop 0.35s var(--ease);
+    }
+
+    /* Таблицы и скроллбары */
+    .table-wrap { overflow-x: auto; padding-bottom: 4px; }
+    .table-wrap::-webkit-scrollbar { height: 6px; }
+    .table-wrap::-webkit-scrollbar-track { background: transparent; }
+    .table-wrap::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; white-space: nowrap; }
+    tbody tr { transition: background 0.18s; }
+    tbody tr:hover { background: var(--card-elev); }
+    tr:last-child td { border-bottom: none; }
+
+    /* Инпуты внутри таблиц — без визуального шума */
+    .inline-inp {
+      padding: 7px 10px; font-size: 13px; border-radius: 11px; min-height: 34px;
+      background: var(--card-elev); border-color: transparent;
+    }
+    tbody tr:hover .inline-inp { background: var(--card); border-color: var(--border); }
+    .inline-inp:focus { background: var(--card) !important; border-color: var(--accent) !important; }
+    select.inline-inp { padding-right: 30px; }
+
+    /* Панели инструментов в карточках админки */
+    .bar-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .card .bar-row {
+      background: var(--card-elev); padding: 10px 12px; border-radius: 18px; border: 1px solid var(--border);
+    }
+    .card .bar-row input, .card .bar-row select {
+      width: auto; font-size: 13px; padding: 8px 12px; min-height: 36px; background: var(--card);
+    }
+    .card .bar-row select { padding-right: 32px; }
+
+    /* Статус-бейджи */
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+    .st-active, .st-paid, .st-sent { background: var(--ok-soft); color: var(--ok); }
+    .st-pending, .st-pending_add, .st-pending_del { background: var(--warn-soft); color: var(--warn); }
+    .st-paid_by_user { background: var(--accent-soft); color: var(--accent); }
+    .st-error, .st-rejected { background: var(--danger-soft); color: var(--danger); }
+
+    /* QR-коды */
+    .qr-grid { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+    .qr-item { text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 20px; background: #fff; color: #1d1d1f; }
+    .qr-item img { width: 150px; height: 150px; display: block; margin: 0 auto 8px; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+      background: var(--card); padding: 3px 7px; border-radius: 7px; border: 1px solid var(--border);
+    }
+
+    @media print {
+      .prog, .topbar, .stats-bar, .no-print { display: none !important; }
+      body { background: #fff; color: #000; }
+      .card { box-shadow: none; border: none; }
+    }
+
+    /* Кастомные Apple Bento Select и Datepicker */
+    .b-native-hidden { display: none !important; }
+    .b-trigger {
+      display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 8px 12px; min-height: 36px; border-radius: 12px;
+      background: var(--card-elev); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; font-weight: 500; font-family: inherit;
+      cursor: pointer; user-select: none; white-space: nowrap;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .card .bar-row .b-trigger { background: var(--card); }
+    tbody tr:hover .b-trigger { background: var(--card); border-color: var(--border-strong); }
+    .b-trigger:hover { border-color: var(--border-strong); }
+    .b-trigger.open { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .b-trigger.full { width: 100%; padding: 10px 14px; font-size: 14px; border-radius: 14px; }
+    .b-trigger .b-ph { color: var(--muted); }
+    .b-trigger svg { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; transition: transform 0.25s var(--ease); }
+    .b-trigger.open .b-chev { transform: rotate(180deg); }
+
+    @keyframes popMenu { from { opacity: 0; transform: scale(0.95) translateY(-6px); } to { opacity: 1; transform: none; } }
+    .b-popover {
+      position: fixed; z-index: 9999;
+      background: var(--surface); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border: 1px solid var(--border-strong); border-radius: 18px;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+      padding: 6px; animation: popMenu 0.22s var(--ease);
+    }
+    .b-opt {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 8px 12px; border-radius: 11px; font-size: 13px; font-weight: 500;
+      color: var(--text); cursor: pointer; transition: background 0.15s;
+    }
+    .b-opt:hover { background: var(--accent-soft); color: var(--accent); }
+    .b-opt.sel { background: var(--accent); color: #fff; font-weight: 600; }
+
+    .b-cal { width: 276px; padding: 12px; }
+    .b-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .b-cal-title { font-size: 14px; font-weight: 700; letter-spacing: -0.02em; text-transform: capitalize; }
+    .b-cal-nav {
+      width: 28px; height: 28px; border-radius: 50%; border: none;
+      background: var(--card-elev); color: var(--text); cursor: pointer;
+      display: grid; place-items: center; font-size: 14px; font-weight: 700;
+      transition: background 0.18s;
+    }
+    .b-cal-nav:hover { background: var(--accent-soft); color: var(--accent); }
+    .b-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+    .b-cal-dow { font-size: 11px; font-weight: 700; color: var(--muted); padding-bottom: 4px; }
+    .b-cal-day {
+      height: 32px; border-radius: 50%; border: none; background: transparent;
+      color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+      font-variant-numeric: tabular-nums; transition: background 0.15s, color 0.15s;
+    }
+    .b-cal-day:hover { background: var(--accent-soft); color: var(--accent); }
+    .b-cal-day.today { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); font-weight: 700; }
+    .b-cal-day.sel { background: var(--accent) !important; color: #fff !important; font-weight: 700; }
+    .b-cal-day.empty { pointer-events: none; }
+    .b-cal-foot { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .b-cal-act {
+      border: none; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600;
+      padding: 5px 10px; border-radius: 99px; cursor: pointer; transition: background 0.15s;
+    }
+    .b-cal-act:hover { background: var(--accent-soft); }
+
+
+  
+  
+  
+    /* Эффектный статичный сине-голубой фон */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.30), transparent 46%),
+        radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.24), transparent 44%),
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 113, 227, 0.18), transparent 65%),
+        repeating-linear-gradient(135deg, rgba(10, 132, 255, 0.04) 0px, rgba(10, 132, 255, 0.04) 1px, transparent 1px, transparent 18px),
+        radial-gradient(rgba(10, 132, 255, 0.16) 1.2px, transparent 1.2px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, auto, 24px 24px;
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.65) 55%, rgba(0, 0, 0, 0.18) 100%);
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.65) 55%, rgba(0, 0, 0, 0.18) 100%);
+    }
+    @media (prefers-color-scheme: dark) {
+      body::before {
+        background:
+          radial-gradient(circle at 14% 0%, rgba(10, 132, 255, 0.38), transparent 48%),
+          radial-gradient(circle at 88% 14%, rgba(56, 189, 248, 0.26), transparent 45%),
+          radial-gradient(ellipse 85% 55% at 50% -8%, rgba(2, 132, 199, 0.22), transparent 65%),
+          repeating-linear-gradient(135deg, rgba(56, 189, 248, 0.045) 0px, rgba(56, 189, 248, 0.045) 1px, transparent 1px, transparent 18px),
+          radial-gradient(rgba(125, 211, 252, 0.12) 1.2px, transparent 1.2px);
+        background-size: 100% 100%, 100% 100%, 100% 100%, auto, 24px 24px;
+      }
+    }
+    header, .topbar, .navbar, .header {
+      box-sizing: border-box;
+    }
+    .topbar-inner, .header-inner, .nav-inner {
+      max-width: var(--container-w, 1200px);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    /* Убираем  из поля промокода */
+    input[placeholder*=""], input[value*=""] {
+      /* подстраховка на уровне атрибутов ниже */
+    }
+
+
+    /* Шапка на всю ширину, контент выровнен точно по краю карточек */
+    header, .topbar {
+      width: 100% !important;
+      max-width: none !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box;
+    }
+    header > *, .topbar > *, .topbar-inner, .header-inner {
+      max-width: var(--container-w, var(--max-w, 1160px));
+      margin-left: auto !important;
+      margin-right: auto !important;
+      box-sizing: border-box;
+    }
+
+
+    /* xsvc-scroll-5-rows: не более 5 строк в заявках на оплату и очереди SMS со скроллом */
+    .xsvc-capped-scroll {
+      max-height: 290px;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
+
+    /* Убираем лишний общий скролл у карточек и обёрток */
+    .bento, .bento-grid, .grid, .cards, .card, .panel, .wrap, .container, main, section {
+      overflow-y: visible !important;
+      max-height: none !important;
+    }
+    .xsvc-capped-scroll, .xsvc-capped-scroll * {
+      max-height: revert !important;
+    }
+    .xsvc-capped-scroll {
+      max-height: 290px !important;
+      overflow-y: auto !important;
+    }
+
+  
+    /* Внутренний скролл только для таблиц заявок на оплату и клиентов/ячеек */
+    .xsvc-table-scroll {
+      max-height: 320px !important;
+      overflow-y: auto !important;
+      overflow-x: auto !important;
+    }
+    .xsvc-table-scroll table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .xsvc-table-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--card, #1c1c1e);
+    }
+
+  
+    /* === ADMIN TABLES REDESIGN === */
+    .xsvc-table-scroll {
+      max-height: 330px !important;
+      overflow-y: auto !important;
+      overflow-x: auto !important;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.18) transparent;
+    }
+    .xsvc-table-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .xsvc-table-scroll::-webkit-scrollbar-track { background: transparent; }
+    .xsvc-table-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 99px; }
+    .xsvc-table-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
+
+    .xsvc-table-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #16171a !important;
+      padding-top: 10px !important;
+      padding-bottom: 10px !important;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .adm-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .adm-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: #e5e7eb;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .adm-btn:hover { background: rgba(255,255,255,.12); }
+    .adm-btn-ok {
+      background: rgba(34,197,94,.16);
+      border-color: rgba(34,197,94,.35);
+      color: #4ade80;
+    }
+    .adm-btn-ok:hover { background: rgba(34,197,94,.26); }
+    .adm-btn-spot {
+      background: rgba(56,189,248,.12);
+      border-color: rgba(56,189,248,.32);
+      color: #7dd3fc;
+    }
+    .adm-btn-spot:hover { background: rgba(56,189,248,.22); }
+    .adm-btn-del {
+      margin-left: 6px;
+      width: 28px;
+      padding: 0;
+      background: rgba(239,68,68,.12);
+      border-color: rgba(239,68,68,.3);
+      color: #f87171;
+    }
+    .adm-btn-del:hover { background: rgba(239,68,68,.24); }
+    .adm-spot-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56,189,248,.12);
+      color: #7dd3fc;
+      border: 1px solid rgba(56,189,248,.25);
+    }
+    .adm-meta {
+      color: var(--muted, #9ca3af);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="prog" id="prog"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-dot">P</div>
+        <span>Парковка</span>
+      </div>
+      <div class="segmented">
+        <button class="seg-btn active" onclick="switchTab('client', this)">Водитель</button>
+        <button class="seg-btn" onclick="switchTab('admin', this)">Админка</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Клиент -->
+    <section id="tab-client">
+      <div class="hero">
+        <h1>Доступ к парковке</h1>
+        <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Оформление пропуска</h2></div>
+          <div class="fields-row">
+            <div class="field">
+              <label>Телефон (для звонка на шлагбаум)</label>
+              <input id="reg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+            </div>
+            <div class="field">
+              <label>Госномер автомобиля</label>
+              <input id="reg-plate" type="text" autocapitalize="characters" placeholder="А123ВС777" oninput="updatePlatePreview(this.value)" />
+              <div id="plate-preview" class="plate-preview hidden">
+                <div class="plate-main" id="pl-main">А 123 ВС</div>
+                <div class="plate-reg"><span id="pl-reg">777</span><span class="plate-rus">RUS</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Марка и модель (необязательно)</label>
+            <input id="reg-model" type="text" placeholder="Например, Geely Atlas Pro" />
+          </div>
+          <div class="field">
+            <label>Промокод (если есть)</label>
+            <div class="promo-row">
+              <input id="reg-promo" type="text" autocapitalize="characters" placeholder="" />
+              <button class="btn btn-secondary" type="button" onclick="applyPromo()">Применить</button>
+            </div>
+            <div id="promo-msg" class="msg"></div>
+          </div>
+          <div class="field">
+            <label>Тариф</label>
+            <div id="tariff-list" class="tariff-grid"></div>
+          </div>
+          <button class="btn btn-primary" onclick="registerAndPay()">Перейти к оплате</button>
+          <div id="reg-msg" class="msg"></div>
+          <div id="pay-box" class="pay-sheet hidden"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Проверить мой статус</h2></div>
+          <div class="field">
+            <label>Номер телефона</label>
+            <input id="chk-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+          </div>
+          <button class="btn btn-primary" onclick="checkStatus()">Показать статус</button>
+          <div id="chk-result"></div>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">Помощь / Написать администратору</button>
+          
+      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
+        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
+        <div style="display:grid;gap:10px;">
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
+            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
+            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
+            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
+            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
+            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
+          <div id="xsvc-status-msg" style="font-size:12px;"></div>
+          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
+        </div>
+      </div>
+
+      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
+        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
+        <div style="display:grid;gap:8px;margin-bottom:10px;">
+          <input type="hidden" id="xsvc-edit-id">
+          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          <div style="display:flex;gap:8px;">
+            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
+              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
+            </div>
+          </div>
+        </div>
+        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
+      </div>
+
+  <script>
+  (function() {
+    let xsvcCatalog = [];
+
+        
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } else {
+        panel.style.display = "none";
+        if (btn) btn.textContent = "Заказать доп услугу";
+      }
+    };
+
+    async function xsvcLoadPublic() {
+      const res = await fetch("/api/extra-services");
+      if (!res.ok) return;
+      xsvcCatalog = await res.json();
+      const sel = document.getElementById("xsvc-select");
+      if (!sel) return;
+      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
+      xsvcRenderPrice();
+    }
+
+    window.xsvcRenderPrice = function() {
+      const sel = document.getElementById("xsvc-select");
+      const hint = document.getElementById("xsvc-price-hint");
+      if (!sel || !hint) return;
+      const item = xsvcCatalog.find(x => x.id === Number(sel.value));
+      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
+    };
+
+    window.xsvcSubmitOrder = async function() {
+      const msg = document.getElementById("xsvc-status-msg");
+      const payBox = document.getElementById("xsvc-pay-box");
+      msg.textContent = "";
+      const payload = {
+        service_id: Number(document.getElementById("xsvc-select").value),
+        spot: document.getElementById("xsvc-spot").value.trim(),
+        phone: document.getElementById("xsvc-phone").value.trim(),
+        comment: document.getElementById("xsvc-comment").value.trim(),
+      };
+      const res = await fetch("/api/extra-services/order", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.textContent = data.detail || "Ошибка оформления";
+        return;
+      }
+      const p = data.payment || {};
+      payBox.style.display = "block";
+      payBox.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
+        <div style="font-size:12px;line-height:1.45;">
+          Место: <b>${data.spot}</b><br>
+          Телефон: <b>${data.phone}</b><br>
+          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
+          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
+        </div>
+        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
+      `;
+    };
+
+    window.xsvcConfirmPaid = async function(orderId) {
+      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
+      const payBox = document.getElementById("xsvc-pay-box");
+      if (res.ok) {
+        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
+      } else {
+        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
+      }
+    };
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    window.xsvcLoadAdmin = async function() {
+      const pass = getAdminPass();
+      const box = document.getElementById("xsvc-admin-box");
+      if (!box) return;
+      if (!pass) { box.style.display = "none"; return; }
+      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!res.ok) { box.style.display = "none"; return; }
+      box.style.display = "block";
+      const rows = await res.json();
+      const list = document.getElementById("xsvc-adm-list");
+      list.innerHTML = rows.map(r => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
+          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
+            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
+          </div>
+        </div>
+      `).join("");
+      window._xsvcAdminRows = rows;
+    };
+
+    window.xsvcEditItem = function(id) {
+      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
+      if (!r) return;
+      document.getElementById("xsvc-edit-id").value = r.id;
+      document.getElementById("xsvc-adm-name").value = r.name;
+      document.getElementById("xsvc-adm-price").value = r.price;
+      document.getElementById("xsvc-adm-desc").value = r.description || "";
+      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
+    };
+
+    window.xsvcResetAdminForm = function() {
+      document.getElementById("xsvc-edit-id").value = "";
+      document.getElementById("xsvc-adm-name").value = "";
+      document.getElementById("xsvc-adm-price").value = "";
+      document.getElementById("xsvc-adm-desc").value = "";
+      document.getElementById("xsvc-adm-active").checked = true;
+    };
+
+    window.xsvcSaveAdmin = async function() {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const id = document.getElementById("xsvc-edit-id").value;
+      const payload = {
+        name: document.getElementById("xsvc-adm-name").value.trim(),
+        price: Number(document.getElementById("xsvc-adm-price").value || 0),
+        description: document.getElementById("xsvc-adm-desc").value.trim(),
+        is_active: document.getElementById("xsvc-adm-active").checked,
+      };
+      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
+      const method = id ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        xsvcResetAdminForm();
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    window.xsvcDeleteItem = async function(id) {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const res = await fetch(`/api/admin/extra-services/${id}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": pass },
+      });
+      if (res.ok) {
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    xsvcLoadPublic();
+    setInterval(xsvcLoadAdmin, 2500);
+  })();
+  </script>
+
+      <button type="button" id="xsvc-open-btn" onclick="xsvcOpenForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;">Заказать доп услугу</button><button type="button" id="xsvc-bottom-close-btn" onclick="xsvcCloseForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;display:none;">Скрыть</button>
+
+      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
+        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
+        <div style="display:grid;gap:10px;">
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
+            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
+            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
+            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
+            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
+            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
+          <div id="xsvc-status-msg" style="font-size:12px;"></div>
+          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
+        </div>
+      </div>
+
+      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
+        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
+        <div style="display:grid;gap:8px;margin-bottom:10px;">
+          <input type="hidden" id="xsvc-edit-id">
+          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          <div style="display:flex;gap:8px;">
+            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
+              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
+            </div>
+          </div>
+        </div>
+        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
+      </div>
+
+  
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Админка -->
+    <section id="tab-admin" class="hidden">
+      <div class="card no-print" id="admin-login" style="max-width: 400px; margin: 30px auto;">
+        <div class="card-head"><h2>Вход для администратора</h2></div>
+        <div class="field">
+          <label>Пароль</label>
+          <input id="adm-pass" type="password" placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary" onclick="loadAdmin()">Войти</button>
+        <div id="adm-err" class="msg err"></div>
+      </div>
+
+      <div id="admin-content" class="hidden">
+        <div class="bar-row no-print" style="margin-bottom:14px;">
+          <div class="segmented">
+            <button class="seg-btn active" id="subbtn-main" onclick="switchAdminSub('main', this)">Основное</button>
+            <button class="seg-btn" id="subbtn-payments" onclick="switchAdminSub('payments', this)">Платежи</button>
+          </div>
+        </div>
+        <div id="adm-sub-main">
+        <div class="stats-bar">
+          <div class="stat-tile">
+            <div class="stat-label">Ячейки RTU5024</div>
+            <div class="stat-val" id="stat-slots">— / 200</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Выручка сегодня</div>
+            <div class="stat-val" id="stat-rev-day">— ₽</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">За 7 / 30 дней</div>
+            <div class="stat-val" style="font-size:15px;" id="stat-rev-period">—</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Модем RX100-R4</div>
+            <div class="stat-val" id="stat-worker">—</div>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head">
+            <h2>Быстрые действия</h2>
+            <div class="bar-row" style="margin:0;">
+              <button class="btn btn-sm btn-ok" onclick="openGateNow()">Открыть шлагбаум</button>
+              <button class="btn btn-sm btn-acc" onclick="exportUsersCsv()">Выгрузить Excel (CSV)</button>
+              <button class="btn btn-sm btn-secondary" onclick="backupNow()">Бэкап БД в TG</button>
+              <button class="btn btn-sm btn-acc" onclick="loadAdmin()">Обновить</button>
+            </div>
+          </div>
+          <div id="quick-msg" class="msg ok" style="margin-top:0;"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Заявки на оплату</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Время</th><th>Телефон / Авто</th><th>Тариф</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
+              <tbody id="orders-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Настройки (СБП, шлагбаум, бот)</h2></div>
+          <div class="bar-row">
+            <input id="set-sbp-phone" type="tel" inputmode="tel" placeholder="Телефон СБП" style="width:165px;" />
+            <input id="set-sbp-bank" placeholder="Банк" style="width:165px;" />
+            <input id="set-sbp-rec" placeholder="Получатель" style="width:150px;" />
+            <input id="set-gate-phone" type="tel" inputmode="tel" placeholder="Номер шлагбаума" style="width:165px;" />
+            <input id="set-bot-user" placeholder="Юзернейм бота (без @)" style="width:170px;" />
+            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить</button>
+          </div>
+          <div id="pay-set-msg" class="msg ok"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Промокоды</h2></div>
+          <div class="bar-row">
+            <input id="new-promo-code" placeholder="Код (VIP20)" style="width:130px; text-transform:uppercase;" />
+            <input id="new-promo-disc" type="number" inputmode="numeric" placeholder="Скидка %" min="1" max="100" style="width:95px;" />
+            <input id="new-promo-date" type="date" title="Действует до" />
+            <select id="new-promo-aud" class="inline-inp" style="width:150px;">
+              <option value="all">Все клиенты</option>
+              <option value="new">Только новые</option>
+              <option value="existing">Только старые</option>
+            </select>
+            <button class="btn btn-sm btn-ok" onclick="createPromo()">Добавить</button>
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Тарифы для нового промокода (если не выбрано — действует на все):</label>
+            <div id="new-promo-tariffs" class="chk-wrap"></div>
+          </div>
+          <div id="adm-promo-msg" class="msg"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Промокод</th><th>Скидка</th><th>До</th><th>Клиенты</th><th>Тарифы (пусто = все)</th><th></th></tr></thead>
+              <tbody id="promos-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Тарифы и цены</h2></div>
+          <div class="bar-row">
+            <input id="new-t-name" placeholder="Название тарифа" style="width:170px;" />
+            <input id="new-t-desc" placeholder="Описание / доп. функции" style="width:210px;" />
+            <input id="new-t-price" type="number" inputmode="numeric" placeholder="Цена ₽" style="width:95px;" />
+            <input id="new-t-days" type="number" inputmode="numeric" placeholder="Дней" value="1" style="width:75px;" />
+            <button class="btn btn-sm btn-ok" onclick="createTariff()">Добавить</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Название</th><th>Описание</th><th>Цена (₽)</th><th>Дней</th><th>Вкл</th><th></th></tr></thead>
+              <tbody id="tariffs-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head">
+            <h2>Клиенты и ячейки RTU5024</h2>
+            <input id="user-search" placeholder="Поиск по телефону или номеру..." oninput="renderUsers()" style="width:240px; font-size:13px; padding:6px 10px;" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Телефон</th><th>Машины</th><th>Ячейка</th><th>Действия</th></tr></thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Рассылка водителям в Telegram</h2></div>
+          <div class="bar-row">
+            <input id="bc-text" placeholder="Например: Завтра в 10:00 уборка снега..." style="flex:1; min-width:240px;" />
+            <button class="btn btn-sm btn-acc" onclick="sendBroadcast()">Отправить всем</button>
+          </div>
+          <div id="bc-msg" class="msg ok"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>QR-коды для печати на въезд</h2>
+            <button class="btn btn-sm btn-secondary no-print" onclick="window.print()">Распечатать</button>
+          </div>
+          <div id="qr-box" class="qr-grid"></div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Очередь SMS на RX100-R4</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Время</th><th>Ячейка</th><th>Команда</th><th>Статус</th></tr></thead>
+              <tbody id="queue-body"></tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+
+        <div id="adm-sub-payments" class="hidden">
+          <div class="card" id="pay-auth-box" style="max-width:420px; margin:20px auto;">
+            <div class="card-head"><h2>Доступ к настройкам платежей</h2></div>
+            <div class="field">
+              <label>Дополнительный пароль</label>
+              <input id="pay-pass" type="password" placeholder="••••••••" />
+            </div>
+            <button class="btn btn-primary" onclick="unlockPayments()">Открыть платежи</button>
+            <div id="pay-auth-err" class="msg err"></div>
+          </div>
+
+          <div id="pay-panel" class="hidden">
+            <div class="card">
+              <div class="card-head">
+                <h2>Приём платежей и автоподписки</h2>
+                <button id="btn-autorenew" class="btn btn-sm btn-secondary" onclick="toggleAutoRenew()">Автоподписки: Выключены</button>
+              </div>
+              <div class="field">
+                <label>Активный платёжный сервис</label>
+                <select id="pay-provider" onchange="renderProviderFields()">
+                  <option value="manual">Ручной перевод по СБП (подтверждение админом)</option>
+                  <option value="yookassa">ЮKassa (карты, СБП, автосписания)</option>
+                  <option value="robokassa">Robokassa (карты, СБП, Робочеки)</option>
+                  <option value="tbank">Т-Банк / Т-Касса</option>
+                  <option value="cloudpayments">CloudPayments</option>
+                </select>
+              </div>
+
+              <div id="prov-manual" class="prov-box" style="color:var(--muted); font-size:13px; margin:10px 0;">
+                Используются реквизиты СБП из вкладки «Основное → Настройки».
+              </div>
+
+              <div id="prov-yookassa" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Shop ID (Идентификатор магазина)</label><input id="yk-shop" placeholder="123456" /></div>
+                  <div class="field"><label>Секретный ключ (Secret Key)</label><input id="yk-secret" type="password" placeholder="live_..." /></div>
+                </div>
+              </div>
+
+              <div id="prov-robokassa" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Идентификатор магазина (MerchantLogin)</label><input id="rk-login" placeholder="my_parking" /></div>
+                  <div class="field"><label>Пароль #1</label><input id="rk-pass1" type="password" /></div>
+                </div>
+                <div class="field"><label>Пароль #2 (для уведомлений)</label><input id="rk-pass2" type="password" /></div>
+              </div>
+
+              <div id="prov-tbank" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>TerminalKey</label><input id="tb-term" placeholder="1700000000000" /></div>
+                  <div class="field"><label>Пароль терминала (Secret)</label><input id="tb-pass" type="password" /></div>
+                </div>
+              </div>
+
+              <div id="prov-cloudpayments" class="prov-box hidden">
+                <div class="fields-row">
+                  <div class="field"><label>Public ID</label><input id="cp-pub" placeholder="pk_..." /></div>
+                  <div class="field"><label>API Secret</label><input id="cp-sec" type="password" /></div>
+                </div>
+              </div>
+
+              <div id="pay-webhook-box" class="status-box hidden" style="margin-bottom:12px;">
+                <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">Webhook URL (укажите в личном кабинете платёжного сервиса):</div>
+                <code id="pay-webhook-url"></code>
+              </div>
+
+              <button class="btn btn-primary" onclick="savePaymentSettings()">Сохранить настройки платежей</button>
+              <div id="pay-save-msg" class="msg ok"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+
+  <div id="help-modal" class="modal-bg hidden" onclick="if(event.target===this) closeHelpModal()">
+    <div class="modal-card">
+      <div class="card-head">
+        <h2>Написать администратору</h2>
+        <button class="btn btn-sm btn-secondary" onclick="closeHelpModal()">×</button>
+      </div>
+      <div class="field">
+        <label>Ваш телефон (если открыли не через Telegram)</label>
+        <input id="help-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+      </div>
+      <div class="field">
+        <label>Сообщение</label>
+        <textarea id="help-text" rows="4" placeholder="Опишите ваш вопрос..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="sendSupport(this)">Отправить</button>
+      <div id="help-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    let tariffs = [];
+    let allUsers = [];
+    let selectedTariffId = null;
+    let activePromo = null;
+
+    function formatPhoneInput(el) {
+      let d = el.value.replace(/\D/g, '');
+      if (!d) { el.value = ''; return; }
+      if (d[0] === '8') d = '7' + d.slice(1);
+      if (d[0] !== '7') d = '7' + d;
+      d = d.slice(0, 11);
+      let res = '+7';
+      if (d.length > 1) res += ' (' + d.slice(1, 4);
+      if (d.length >= 5) res += ') ' + d.slice(4, 7);
+      if (d.length >= 8) res += '-' + d.slice(7, 9);
+      if (d.length >= 10) res += '-' + d.slice(9, 11);
+      el.value = res;
+    }
+
+    function updatePlatePreview(val) {
+      const clean = val.replace(/\s+/g, '').toUpperCase();
+      const box = document.getElementById('plate-preview');
+      if (clean.length < 4) { box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      const m = clean.match(/^([А-ЯA-Z])(\d{3})([А-ЯA-Z]{2})(\d{2,3})?$/);
+      if (m) {
+        document.getElementById('pl-main').textContent = `${m[1]} ${m[2]} ${m[3]}`;
+        document.getElementById('pl-reg').textContent = m[4] || '77';
+      } else {
+        document.getElementById('pl-main').textContent = clean.slice(0, 6);
+        document.getElementById('pl-reg').textContent = clean.slice(6, 9) || 'RUS';
+      }
+    }
+
+    async function loadTariffs() {
+      const r = await fetch('/api/tariffs');
+      tariffs = await r.json();
+      if (tariffs.length && !selectedTariffId) selectedTariffId = tariffs[0].id;
+      renderClientTariffs();
+    }
+
+    function renderClientTariffs() {
+      const baseDisc = activePromo ? activePromo.discount_percent : 0;
+      const allowedIds = (activePromo && activePromo.tariff_ids && activePromo.tariff_ids.length) ? activePromo.tariff_ids : null;
+      document.getElementById('tariff-list').innerHTML = tariffs.map(t => {
+        const disc = (baseDisc && (!allowedIds || allowedIds.includes(t.id))) ? baseDisc : 0;
+        const finalPrice = Math.max(0, Math.round(t.price * (100 - disc) / 100));
+        const priceHtml = disc ? `<span class="t-old">${t.price} ₽</span>${finalPrice} ₽` : `${t.price} ₽`;
+        return `
+          <div class="tariff-card ${t.id === selectedTariffId ? 'selected' : ''}" onclick="selectTariff(${t.id})">
+            <div><div class="t-name">${t.name}</div>${t.description ? `<div class="t-desc">${t.description}</div>` : ''}</div>
+            <span class="t-price">${priceHtml}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectTariff(id) { selectedTariffId = id; renderClientTariffs(); }
+
+    async function applyPromo() {
+      const inp = document.getElementById('reg-promo');
+      const msg = document.getElementById('promo-msg');
+      const code = inp.value.trim();
+      if (!code) { activePromo = null; msg.textContent = ''; renderClientTariffs(); return; }
+      const ph = document.getElementById('reg-phone').value.trim();
+      const r = await fetch('/api/promo/' + encodeURIComponent(code) + (ph ? '?phone=' + encodeURIComponent(ph) : ''));
+      const d = await r.json();
+      if (r.ok) {
+        activePromo = d;
+        msg.textContent = `Применён ${d.code}: скидка ${d.discount_percent}%` + (d.valid_until ? ` (до ${d.valid_until})` : '');
+        msg.className = 'msg ok';
+      } else {
+        activePromo = null;
+        inp.value = ''; // Очищаем невалидный промокод, чтобы не мешал оплате
+        msg.textContent = (d.detail || 'Промокод недействителен') + ' — поле очищено, можно продолжить оплату.';
+        msg.className = 'msg warn';
+      }
+      renderClientTariffs();
+    }
+
+    function switchTab(name, btn) {
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-client').classList.toggle('hidden', name !== 'client');
+      document.getElementById('tab-admin').classList.toggle('hidden', name !== 'admin');
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text);
+      const old = btn.textContent;
+      btn.textContent = 'Скопировано!';
+      setTimeout(() => btn.textContent = old, 1500);
+    }
+
+    async function markUserPaid(orderId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Отправка...';
+      await fetch(`/api/orders/${orderId}/paid`, {method: 'POST'});
+      btn.textContent = 'Отправлено админу';
+      btn.className = 'btn btn-sm btn-ok';
+    }
+
+    async function registerAndPay() {
+      const msg = document.getElementById('reg-msg');
+      const payBox = document.getElementById('pay-box');
+      const promoInp = document.getElementById('reg-promo');
+      payBox.classList.add('hidden');
+      const body = {
+        phone: document.getElementById('reg-phone').value.trim(),
+        plate_number: document.getElementById('reg-plate').value.trim(),
+        car_model: document.getElementById('reg-model').value.trim() || null,
+        tariff_id: selectedTariffId,
+        promo_code: activePromo ? activePromo.code : (promoInp.value.trim() || null),
+      };
+      if (!body.phone || !body.plate_number) {
+        msg.textContent = 'Укажите телефон и госномер автомобиля.';
+        msg.className = 'msg err';
+        return;
+      }
+      const r = await fetch('/api/register', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        if (promoInp.value.trim() && !data.promo_code) {
+          promoInp.value = '';
+          activePromo = null;
+          renderClientTariffs();
+        }
+        msg.textContent = '';
+        payBox.classList.remove('hidden');
+        const p = data.payment;
+        const promoText = data.promo_code ? ` (${data.promo_code} -${data.discount_percent}%)` : '';
+        payBox.innerHTML = `
+          <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
+          <div>СБП: <b>${p.sbp_phone}</b> (${p.sbp_bank})</div>
+          <div style="color:var(--muted); margin-bottom:6px;">Получатель: ${p.sbp_recipient}</div>
+          <div class="pay-actions">
+            <button class="btn btn-sm btn-secondary" onclick="copyText('${p.sbp_phone}', this)">Скопировать номер</button>
+            <button class="btn btn-sm btn-ok" onclick="markUserPaid(${data.order_id}, this)">Я оплатил</button>
+          </div>
+        `;
+      } else {
+        msg.textContent = data.detail || 'Ошибка';
+        msg.className = 'msg err';
+      }
+    }
+
+            async function checkStatus() {
+      const box = document.getElementById('chk-result');
+      const phone = document.getElementById('chk-phone').value.trim();
+      if (!phone) return;
+      const r = await fetch('/api/status/' + encodeURIComponent(phone));
+      if (!r.ok) { box.innerHTML = '<div class="msg err">Номер не найден в базе.</div>'; return; }
+      const d = await r.json();
+      const stHumanMap = {
+        pending_add: 'Подключается',
+        pending: 'Ожидает подключения',
+        active: 'Активен',
+        pending_del: 'Отключается',
+        free: 'Не активен'
+      };
+      const cars = (d.vehicles || []).map(v => `${v.plate}${v.model ? ' · ' + v.model : ''}`).join('<br>') || '—';
+      const gateBtns = (d.slot && d.slot.status === 'active' && d.gate_phone)
+        ? `<div class="pay-actions" style="margin-top:10px;">
+             <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на парковку</a>
+             <a class="btn btn-sm btn-secondary" href="/api/gate-contact.vcf">Сохранить контакт</a>
+           </div>`
+        : '';
+      let slotHtml = '<div style="color:var(--muted)">Доступ не оформлен</div>';
+      if (d.slot) {
+        const stLabel = stHumanMap[d.slot.status] || d.slot.status;
+        const spotVal = d.slot.spot || d.slot.number || '';
+        slotHtml = `
+          ${spotVal ? `<div style="margin-bottom:4px;">Парковочное место: ${spotVal}</div>` : ''}
+          <div style="margin-bottom:4px;">Статус: ${stLabel}</div>
+          <div style="color:var(--muted)">Действует до: ${d.slot.valid_until || '—'}</div>
+          ${gateBtns}
+        `;
+      }
+      box.innerHTML = `
+        <div class="status-box" style="font-size:13px;line-height:1.5;">
+          <div style="font-weight:600;margin-bottom:6px;">+${d.phone}</div>
+          <div style="margin-bottom:8px;">${cars}</div>
+          <div>${slotHtml}</div>
+        </div>
+      `;
+    }
+
+    function getAdminPass() { return document.getElementById('adm-pass').value || localStorage.getItem('adm_pass') || ''; }
+
+        function renderUsers() {
+      const q = (document.getElementById('user-search').value || '').trim().toLowerCase();
+      const filtered = allUsers.filter(u =>
+        u.phone.includes(q) || (u.vehicles || []).some(v => (v.plate || '').toLowerCase().includes(q))
+      );
+      const stMap = {
+        active: 'Активен',
+        pending_add: 'Подключается',
+        pending: 'Подключается',
+        pending_del: 'Отключается',
+        free: 'Не активен'
+      };
+      document.getElementById('users-body').innerHTML = filtered.map(u => {
+        const cars = (u.vehicles || []).map(v => v.plate).filter(Boolean).join(', ') || '—';
+        let slotHtml = '<span class="adm-meta">Нет доступа</span>';
+        if (u.slot) {
+          const stLabel = stMap[u.slot.status] || u.slot.status;
+          const spotTag = u.slot.spot ? `<span class="adm-spot-tag">Место ${u.slot.spot}</span>` : '';
+          slotHtml = `
+            <div><span class="pill st-${u.slot.status}">${stLabel}</span>${spotTag}</div>
+            <div class="adm-meta">#${u.slot.number} · до ${u.slot.valid_until || '—'}</div>
+          `;
+        }
+        const spotBtn = u.slot
+          ? `<button class="adm-btn adm-btn-spot" onclick="if(window.xsvcSetSpot) xsvcSetSpot(${u.id}, '${u.slot.spot || ''}')">Место</button>`
+          : '';
+        return `<tr>
+          <td>${u.id}</td>
+          <td><b>+${u.phone}</b></td>
+          <td style="max-width:260px;word-break:break-word;">${cars}</td>
+          <td>${slotHtml}</td>
+          <td style="white-space:nowrap;">
+            <div class="adm-actions">
+              <button class="adm-btn" onclick="adminGrant(${u.id}, 1)">+1д</button>
+              <button class="adm-btn adm-btn-ok" onclick="adminGrant(${u.id}, 30)">+30д</button>
+              ${spotBtn}
+              <button class="adm-btn adm-btn-del" title="Отключить доступ" onclick="adminRevoke(${u.id})">×</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderQrs(botUser) {
+      const siteUrl = window.location.origin;
+      let html = `<div class="qr-item">
+        <img src="/api/qr?data=${encodeURIComponent(siteUrl)}" alt="QR Сайт" />
+        <b>Оплата парковки (Сайт)</b><br><small>${siteUrl}</small>
+      </div>`;
+      if (botUser) {
+        const botUrl = 'https://t.me/' + botUser.replace(/^@/, '');
+        html += `<div class="qr-item">
+          <img src="/api/qr?data=${encodeURIComponent(botUrl)}" alt="QR Бот" />
+          <b>Telegram-бот парковки</b><br><small>@${botUser.replace(/^@/, '')}</small>
+        </div>`;
+      }
+      document.getElementById('qr-box').innerHTML = html;
+    }
+
+    async function loadAdmin() {
+      const pass = getAdminPass();
+      const headers = {'X-Admin-Password': pass};
+      const [sRes, cfgRes, oRes, pRes, uRes, qRes, tRes] = await Promise.all([
+        fetch('/api/admin/stats', {headers}),
+        fetch('/api/settings'),
+        fetch('/api/admin/orders', {headers}),
+        fetch('/api/admin/promos', {headers}),
+        fetch('/api/admin/users', {headers}),
+        fetch('/api/admin/queue', {headers}),
+        fetch('/api/admin/tariffs', {headers}),
+      ]);
+      if (!uRes.ok) { document.getElementById('adm-err').textContent = 'Неверный пароль'; return; }
+      localStorage.setItem('adm_pass', pass);
+      document.getElementById('admin-login').classList.add('hidden');
+      document.getElementById('admin-content').classList.remove('hidden');
+
+      const stats = await sRes.json();
+      document.getElementById('stat-slots').textContent = `${stats.slots_used} / ${stats.slots_total}`;
+      document.getElementById('stat-rev-day').textContent = `${stats.finance.today} ₽`;
+      document.getElementById('stat-rev-period').textContent = `${stats.finance.week} ₽ / ${stats.finance.month} ₽`;
+      document.getElementById('stat-worker').innerHTML = stats.worker_online
+        ? '<span style="color:var(--ok)">В сети</span>'
+        : '<span style="color:var(--danger)">Нет связи</span>';
+
+      const cfg = await cfgRes.json();
+      document.getElementById('set-sbp-phone').value = cfg.sbp_phone;
+      document.getElementById('set-sbp-bank').value = cfg.sbp_bank;
+      document.getElementById('set-sbp-rec').value = cfg.sbp_recipient;
+      document.getElementById('set-gate-phone').value = cfg.gate_phone;
+      document.getElementById('set-bot-user').value = cfg.bot_username;
+      renderQrs(cfg.bot_username);
+
+      const orders = await oRes.json();
+      const stLabels = {pending: 'создана', paid_by_user: 'оплачено клиентом', paid: 'подтверждена', rejected: 'отклонена'};
+      document.getElementById('orders-body').innerHTML = orders.map(o => `<tr>
+        <td>${o.id}</td>
+        <td><span style="color:var(--muted)">${o.created_at}</span></td>
+        <td><b>+${o.phone}</b><br><span style="color:var(--muted);font-size:12px;">${o.plates}</span></td>
+        <td>${o.tariff_name}${o.promo_code ? `<br><span style="color:var(--ok);font-size:11px;">${o.promo_code} (-${o.discount_percent}%)</span>` : ''}</td>
+        <td><b>${o.amount} ₽</b></td>
+        <td><span class="pill st-${o.status}">${stLabels[o.status] || o.status}</span></td>
+        <td style="white-space:nowrap;">${(o.status === 'pending' || o.status === 'paid_by_user') ? `
+          <button class="btn btn-sm btn-ok" onclick="confirmOrder(${o.id})">Ок</button>
+          <button class="btn btn-sm btn-del" onclick="rejectOrder(${o.id})">×</button>
+        ` : ''}</td>
+      </tr>`).join('');
+
+      const admTariffs = await tRes.json();
+      tariffs = admTariffs.filter(t => t.is_active);
+      renderClientTariffs();
+
+      document.getElementById('new-promo-tariffs').innerHTML = admTariffs.map(t =>
+        `<label class="chk-lbl"><input type="checkbox" class="new-pt-chk" value="${t.id}" /> ${t.name}</label>`
+      ).join('');
+
+      document.getElementById('tariffs-body').innerHTML = admTariffs.map(t => `<tr>
+        <td><input class="inline-inp" id="tn-${t.id}" value="${t.name.replace(/"/g, '&quot;')}" style="width:165px;"></td>
+        <td><input class="inline-inp" id="tdesc-${t.id}" value="${(t.description || '').replace(/"/g, '&quot;')}" placeholder="Описание" style="width:200px;"></td>
+        <td><input class="inline-inp" id="tp-${t.id}" type="number" inputmode="numeric" value="${t.price}" style="width:85px;"></td>
+        <td><input class="inline-inp" id="td-${t.id}" type="number" inputmode="numeric" value="${t.days}" style="width:65px;"></td>
+        <td style="text-align:center;"><input type="checkbox" id="tact-${t.id}" ${t.is_active ? 'checked' : ''} style="width:auto;"></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-acc" onclick="saveTariff(${t.id}, ${t.is_night})">Сохранить</button>
+          <button class="btn btn-sm btn-del" onclick="deleteTariff(${t.id})">×</button>
+        </td>
+      </tr>`).join('');
+
+      const promos = await pRes.json();
+      document.getElementById('promos-body').innerHTML = promos.map(p => {
+        const chks = admTariffs.map(t =>
+          `<label class="chk-lbl"><input type="checkbox" class="pt-chk-${p.id}" value="${t.id}" ${(p.tariff_ids || []).includes(t.id) ? 'checked' : ''} /> ${t.name}</label>`
+        ).join('');
+        return `<tr>
+          <td><input class="inline-inp" id="pc-${p.id}" value="${p.code}" style="width:115px;text-transform:uppercase;"></td>
+          <td><input class="inline-inp" id="pd-${p.id}" type="number" inputmode="numeric" value="${p.discount_percent}" style="width:70px;"></td>
+          <td><input class="inline-inp" id="pv-${p.id}" type="date" value="${p.valid_until}" style="width:135px;"></td>
+          <td>
+            <select class="inline-inp" id="pa-${p.id}" style="width:135px;">
+              <option value="all" ${p.target_audience === 'all' ? 'selected' : ''}>Все клиенты</option>
+              <option value="new" ${p.target_audience === 'new' ? 'selected' : ''}>Только новые</option>
+              <option value="existing" ${p.target_audience === 'existing' ? 'selected' : ''}>Только старые</option>
+            </select>
+          </td>
+          <td><div class="chk-wrap">${chks}</div></td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-sm btn-acc" onclick="savePromo(${p.id})">Сохранить</button>
+            <button class="btn btn-sm btn-del" onclick="deletePromo(${p.id})">×</button>
+          </td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Промокодов пока нет</td></tr>';
+
+      allUsers = await uRes.json();
+      renderUsers();
+
+      const queue = await qRes.json();
+      document.getElementById('queue-body').innerHTML = queue.map(q => `<tr>
+        <td>${q.id}</td><td><span style="color:var(--muted)">${q.created_at}</span></td><td>${q.slot ? '#' + q.slot : '—'}</td>
+        <td><code>${q.command}</code></td><td><span class="pill st-${q.status}">${q.status}</span></td>
+      </tr>`).join('');
+    }
+
+    async function openGateNow() {
+      await fetch('/api/admin/open-gate', {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      const m = document.getElementById('quick-msg');
+      m.textContent = 'Команда открытия шлагбаума (CC) поставлена в очередь на модем.';
+      setTimeout(() => m.textContent = '', 3000);
+      loadAdmin();
+    }
+
+    async function backupNow() {
+      await fetch('/api/admin/backup-now', {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      const m = document.getElementById('quick-msg');
+      m.textContent = 'Файл базы данных отправлен вам в Telegram.';
+      setTimeout(() => m.textContent = '', 3000);
+    }
+
+    async function exportUsersCsv() {
+      const r = await fetch('/api/admin/export/users', {headers: {'X-Admin-Password': getAdminPass()}});
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'parking_users.csv';
+      a.click();
+    }
+
+    async function sendBroadcast() {
+      const inp = document.getElementById('bc-text');
+      const m = document.getElementById('bc-msg');
+      if (!inp.value.trim()) return;
+      const r = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({text: inp.value.trim()}),
+      });
+      const d = await r.json();
+      inp.value = '';
+      m.textContent = `Отправлено ${d.sent} пользователям.`;
+      setTimeout(() => m.textContent = '', 3000);
+    }
+
+    async function saveSettings() {
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          sbp_phone: document.getElementById('set-sbp-phone').value,
+          sbp_bank: document.getElementById('set-sbp-bank').value,
+          sbp_recipient: document.getElementById('set-sbp-rec').value,
+          gate_phone: document.getElementById('set-gate-phone').value,
+          bot_username: document.getElementById('set-bot-user').value,
+        }),
+      });
+      const m = document.getElementById('pay-set-msg');
+      m.textContent = 'Настройки сохранены';
+      setTimeout(() => m.textContent = '', 2000);
+      loadAdmin();
+    }
+
+    async function createPromo() {
+      const msg = document.getElementById('adm-promo-msg');
+      const tIds = Array.from(document.querySelectorAll('.new-pt-chk:checked')).map(el => parseInt(el.value, 10));
+      const body = {
+        code: document.getElementById('new-promo-code').value.trim(),
+        discount_percent: parseInt(document.getElementById('new-promo-disc').value, 10) || 0,
+        valid_until: document.getElementById('new-promo-date').value || null,
+        target_audience: document.getElementById('new-promo-aud').value,
+        tariff_ids: tIds,
+      };
+      const r = await fetch('/api/admin/promos', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()}, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        document.getElementById('new-promo-code').value = '';
+        document.getElementById('new-promo-disc').value = '';
+        document.getElementById('new-promo-date').value = '';
+        syncBentoControls(true);
+        document.querySelectorAll('.new-pt-chk').forEach(el => el.checked = false);
+        msg.textContent = '';
+        loadAdmin();
+      } else {
+        msg.textContent = d.detail || 'Ошибка';
+        msg.className = 'msg err';
+      }
+    }
+
+    async function savePromo(id) {
+      const tIds = Array.from(document.querySelectorAll(`.pt-chk-${id}:checked`)).map(el => parseInt(el.value, 10));
+      await fetch(`/api/admin/promos/${id}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          code: document.getElementById(`pc-${id}`).value.trim(),
+          discount_percent: parseInt(document.getElementById(`pd-${id}`).value, 10) || 0,
+          valid_until: document.getElementById(`pv-${id}`).value || null,
+          target_audience: document.getElementById(`pa-${id}`).value,
+          tariff_ids: tIds,
+        }),
+      });
+      loadAdmin();
+    }
+
+    async function deletePromo(id) {
+      if (!confirm('Удалить промокод?')) return;
+      await fetch(`/api/admin/promos/${id}`, {method: 'DELETE', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function confirmOrder(id) {
+      await fetch(`/api/admin/orders/${id}/confirm`, {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function rejectOrder(id) {
+      await fetch(`/api/admin/orders/${id}/reject`, {method: 'POST', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function adminGrant(userId, days) {
+      await fetch('/api/admin/grant', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({user_id: userId, days}),
+      });
+      loadAdmin();
+    }
+
+    async function createTariff() {
+      const name = document.getElementById('new-t-name').value.trim();
+      if (!name) return;
+      await fetch('/api/admin/tariffs', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          name,
+          description: document.getElementById('new-t-desc').value.trim(),
+          price: parseInt(document.getElementById('new-t-price').value, 10) || 0,
+          days: parseInt(document.getElementById('new-t-days').value, 10) || 1,
+          is_night: false,
+          is_active: true,
+        }),
+      });
+      document.getElementById('new-t-name').value = '';
+      document.getElementById('new-t-desc').value = '';
+      document.getElementById('new-t-price').value = '';
+      loadAdmin();
+    }
+
+    async function saveTariff(id, isNight) {
+      await fetch(`/api/admin/tariffs/${id}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({
+          name: document.getElementById(`tn-${id}`).value.trim(),
+          description: document.getElementById(`tdesc-${id}`).value.trim(),
+          price: parseInt(document.getElementById(`tp-${id}`).value, 10) || 0,
+          days: parseInt(document.getElementById(`td-${id}`).value, 10) || 0,
+          is_night: !!isNight,
+          is_active: document.getElementById(`tact-${id}`).checked,
+        }),
+      });
+      loadAdmin();
+    }
+
+    async function deleteTariff(id) {
+      if (!confirm('Удалить тариф? (Если по нему уже были заказы, он просто отключится)')) return;
+      await fetch(`/api/admin/tariffs/${id}`, {method: 'DELETE', headers: {'X-Admin-Password': getAdminPass()}});
+      loadAdmin();
+    }
+
+    async function adminRevoke(userId) {
+      if (!confirm('Удалить номер из RTU5024?')) return;
+      await fetch('/api/admin/revoke', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
+        body: JSON.stringify({user_id: userId}),
+      });
+      loadAdmin();
+    }
+
+    
+    function openHelpModal() {
+      const ph = document.getElementById('chk-phone').value || document.getElementById('reg-phone').value || '';
+      if (ph && !document.getElementById('help-phone').value) document.getElementById('help-phone').value = ph;
+      document.getElementById('help-msg').textContent = '';
+      document.getElementById('help-modal').classList.remove('hidden');
+    }
+    function closeHelpModal() {
+      document.getElementById('help-modal').classList.add('hidden');
+    }
+    async function sendSupport(btn) {
+      const text = document.getElementById('help-text').value.trim();
+      const phone = document.getElementById('help-phone').value.trim();
+      const msg = document.getElementById('help-msg');
+      if (!text) { msg.textContent = 'Введите текст сообщения.'; msg.className = 'msg err'; return; }
+      const tgUser = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe ? window.Telegram.WebApp.initDataUnsafe.user : null;
+      btn.disabled = true;
+      const r = await fetch('/api/support', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          text,
+          phone: phone || null,
+          telegram_id: tgUser ? tgUser.id : null,
+          full_name: tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : null,
+        }),
+      });
+      btn.disabled = false;
+      if (r.ok) {
+        document.getElementById('help-text').value = '';
+        msg.textContent = 'Сообщение отправлено администратору!';
+        msg.className = 'msg ok';
+        setTimeout(closeHelpModal, 1500);
+      } else {
+        const d = await r.json();
+        msg.textContent = d.detail || 'Ошибка отправки';
+        msg.className = 'msg err';
+      }
+    }
+
+    
+    let payAutoRenew = '0';
+
+    function switchAdminSub(tab, btn) {
+      document.getElementById('subbtn-main').classList.toggle('active', tab === 'main');
+      document.getElementById('subbtn-payments').classList.toggle('active', tab === 'payments');
+      document.getElementById('adm-sub-main').classList.toggle('hidden', tab !== 'main');
+      document.getElementById('adm-sub-payments').classList.toggle('hidden', tab !== 'payments');
+      if (tab === 'payments' && sessionStorage.getItem('pay_pass')) {
+        document.getElementById('pay-pass').value = sessionStorage.getItem('pay_pass');
+        unlockPayments();
+      }
+    }
+
+    function updateAutoRenewBtn() {
+      const btn = document.getElementById('btn-autorenew');
+      const on = payAutoRenew === '1';
+      btn.textContent = on ? 'Автоподписки: Включены' : 'Автоподписки: Выключены';
+      btn.className = on ? 'btn btn-sm btn-ok' : 'btn btn-sm btn-secondary';
+    }
+
+    function toggleAutoRenew() {
+      payAutoRenew = payAutoRenew === '1' ? '0' : '1';
+      updateAutoRenewBtn();
+    }
+
+    function renderProviderFields() {
+      const prov = document.getElementById('pay-provider').value;
+      document.querySelectorAll('.prov-box').forEach(el => el.classList.add('hidden'));
+      const box = document.getElementById('prov-' + prov);
+      if (box) box.classList.remove('hidden');
+      const wh = document.getElementById('pay-webhook-box');
+      if (prov === 'manual') {
+        wh.classList.add('hidden');
+      } else {
+        wh.classList.remove('hidden');
+        document.getElementById('pay-webhook-url').textContent = window.location.origin + '/api/payments/webhook/' + prov;
+      }
+    }
+
+    async function unlockPayments() {
+      const ppass = document.getElementById('pay-pass').value;
+      const err = document.getElementById('pay-auth-err');
+      err.textContent = '';
+      const r = await fetch('/api/admin/payments/settings', {
+        headers: {'X-Admin-Password': getAdminPass(), 'X-Payment-Password': ppass}
+      });
+      if (!r.ok) {
+        sessionStorage.removeItem('pay_pass');
+        err.textContent = 'Неверный дополнительный пароль';
+        return;
+      }
+      sessionStorage.setItem('pay_pass', ppass);
+      const d = await r.json();
+      document.getElementById('pay-auth-box').classList.add('hidden');
+      document.getElementById('pay-panel').classList.remove('hidden');
+      document.getElementById('pay-provider').value = d.pay_provider || 'manual';
+      payAutoRenew = d.pay_auto_renew === '1' ? '1' : '0';
+      updateAutoRenewBtn();
+      document.getElementById('yk-shop').value = d.yk_shop_id || '';
+      document.getElementById('yk-secret').value = d.yk_secret_key || '';
+      document.getElementById('rk-login').value = d.rk_login || '';
+      document.getElementById('rk-pass1').value = d.rk_pass1 || '';
+      document.getElementById('rk-pass2').value = d.rk_pass2 || '';
+      document.getElementById('tb-term').value = d.tb_terminal_key || '';
+      document.getElementById('tb-pass').value = d.tb_password || '';
+      document.getElementById('cp-pub').value = d.cp_public_id || '';
+      document.getElementById('cp-sec').value = d.cp_api_secret || '';
+      renderProviderFields();
+      syncBentoControls(true);
+    }
+
+    async function savePaymentSettings() {
+      const ppass = sessionStorage.getItem('pay_pass') || document.getElementById('pay-pass').value;
+      const m = document.getElementById('pay-save-msg');
+      const r = await fetch('/api/admin/payments/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass(), 'X-Payment-Password': ppass},
+        body: JSON.stringify({
+          pay_provider: document.getElementById('pay-provider').value,
+          pay_auto_renew: payAutoRenew,
+          yk_shop_id: document.getElementById('yk-shop').value.trim(),
+          yk_secret_key: document.getElementById('yk-secret').value.trim(),
+          rk_login: document.getElementById('rk-login').value.trim(),
+          rk_pass1: document.getElementById('rk-pass1').value.trim(),
+          rk_pass2: document.getElementById('rk-pass2').value.trim(),
+          tb_terminal_key: document.getElementById('tb-term').value.trim(),
+          tb_password: document.getElementById('tb-pass').value.trim(),
+          cp_public_id: document.getElementById('cp-pub').value.trim(),
+          cp_api_secret: document.getElementById('cp-sec').value.trim(),
+        }),
+      });
+      if (r.ok) {
+        m.textContent = 'Настройки платежей сохранены';
+        m.className = 'msg ok';
+        setTimeout(() => m.textContent = '', 2500);
+      } else {
+        m.textContent = 'Ошибка сохранения';
+        m.className = 'msg err';
+      }
+    }
+
+    
+    window.addEventListener('scroll', () => {
+      const h = document.documentElement;
+      const sc = h.scrollTop / (h.scrollHeight - window.innerHeight || 1);
+      const p = document.getElementById('prog');
+      if (p) p.style.transform = 'scaleX(' + Math.min(Math.max(sc, 0), 1) + ')';
+    }, {passive: true});
+
+    
+    /* Кастомные Apple Bento Select & Datepicker */
+    let activeBentoPop = null;
+    let activeBentoTrig = null;
+
+    function closeBentoPop() {
+      if (activeBentoPop) { activeBentoPop.remove(); activeBentoPop = null; }
+      if (activeBentoTrig) { activeBentoTrig.classList.remove('open'); activeBentoTrig = null; }
+    }
+    document.addEventListener('click', (e) => {
+      if (activeBentoPop && !activeBentoPop.contains(e.target) && (!activeBentoTrig || !activeBentoTrig.contains(e.target))) {
+        closeBentoPop();
+      }
+    });
+    window.addEventListener('scroll', closeBentoPop, {passive: true, capture: true});
+    window.addEventListener('resize', closeBentoPop);
+
+    function positionPopover(pop, trig) {
+      const r = trig.getBoundingClientRect();
+      pop.style.minWidth = Math.max(r.width, 160) + 'px';
+      let top = r.bottom + 6;
+      let left = r.left;
+      document.body.appendChild(pop);
+      const pr = pop.getBoundingClientRect();
+      if (top + pr.height > window.innerHeight - 10) top = Math.max(10, r.top - pr.height - 6);
+      if (left + pr.width > window.innerWidth - 10) left = Math.max(10, window.innerWidth - pr.width - 10);
+      pop.style.top = top + 'px';
+      pop.style.left = left + 'px';
+    }
+
+    function fmtRuDate(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return (d && m && y) ? `${d}.${m}.${y}` : iso;
+    }
+
+    function enhanceSelect(sel, force) {
+      if (sel.dataset.bentoInit) {
+        if (force && sel._bentoSync) sel._bentoSync();
+        return;
+      }
+      sel.dataset.bentoInit = '1';
+      sel.classList.add('b-native-hidden');
+      const trig = document.createElement('button');
+      trig.type = 'button';
+      trig.className = 'b-trigger' + (sel.style.width ? '' : ' full');
+      if (sel.style.width) trig.style.minWidth = sel.style.width;
+      const sync = () => {
+        const opt = sel.options[sel.selectedIndex];
+        trig.innerHTML = `<span>${opt ? opt.textContent : ''}</span><svg class="b-chev" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.25L6 7.75L9.5 4.25" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      };
+      sel._bentoSync = sync;
+      sync();
+      trig.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = activeBentoTrig === trig;
+        closeBentoPop();
+        if (wasOpen) return;
+        const pop = document.createElement('div');
+        pop.className = 'b-popover';
+        Array.from(sel.options).forEach((o) => {
+          const item = document.createElement('div');
+          item.className = 'b-opt' + (o.value === sel.value ? ' sel' : '');
+          item.innerHTML = `<span>${o.textContent}</span>${o.value === sel.value ? '<span>✓</span>' : ''}`;
+          item.addEventListener('click', () => {
+            sel.value = o.value;
+            sync();
+            sel.dispatchEvent(new Event('change', {bubbles: true}));
+            closeBentoPop();
+          });
+          pop.appendChild(item);
+        });
+        trig.classList.add('open');
+        activeBentoPop = pop;
+        activeBentoTrig = trig;
+        positionPopover(pop, trig);
+      });
+      sel.parentNode.insertBefore(trig, sel.nextSibling);
+    }
+
+    function enhanceDate(inp, force) {
+      if (inp.dataset.bentoInit) {
+        if (force && inp._bentoSync) inp._bentoSync();
+        return;
+      }
+      inp.dataset.bentoInit = '1';
+      inp.classList.add('b-native-hidden');
+      const trig = document.createElement('button');
+      trig.type = 'button';
+      trig.className = 'b-trigger';
+      trig.style.minWidth = inp.style.width || '142px';
+      const sync = () => {
+        const v = fmtRuDate(inp.value);
+        trig.innerHTML = `<span class="${v ? '' : 'b-ph'}">${v || 'дд.мм.гггг'}</span><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 1.8V4M11 1.8V4M2.5 6.5H13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+      };
+      inp._bentoSync = sync;
+      sync();
+      trig.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = activeBentoTrig === trig;
+        closeBentoPop();
+        if (wasOpen) return;
+        const now = new Date();
+        let cur = inp.value ? new Date(inp.value + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), 1);
+        let viewY = cur.getFullYear(), viewM = cur.getMonth();
+        const months = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+        const pop = document.createElement('div');
+        pop.className = 'b-popover b-cal';
+
+        const renderCal = () => {
+          const firstDow = (new Date(viewY, viewM, 1).getDay() + 6) % 7;
+          const daysInM = new Date(viewY, viewM + 1, 0).getDate();
+          const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+          let cells = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => `<div class="b-cal-dow">${d}</div>`).join('');
+          for (let i = 0; i < firstDow; i++) cells += `<button type="button" class="b-cal-day empty"></button>`;
+          for (let d = 1; d <= daysInM; d++) {
+            const iso = `${viewY}-${String(viewM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const cls = 'b-cal-day' + (iso === todayIso ? ' today' : '') + (iso === inp.value ? ' sel' : '');
+            cells += `<button type="button" class="${cls}" data-iso="${iso}">${d}</button>`;
+          }
+          pop.innerHTML = `
+            <div class="b-cal-head">
+              <button type="button" class="b-cal-nav" data-nav="-1">‹</button>
+              <div class="b-cal-title">${months[viewM]} ${viewY}</div>
+              <button type="button" class="b-cal-nav" data-nav="1">›</button>
+            </div>
+            <div class="b-cal-grid">${cells}</div>
+            <div class="b-cal-foot">
+              <button type="button" class="b-cal-act" data-act="clear">Очистить</button>
+              <button type="button" class="b-cal-act" data-act="today">Сегодня</button>
+            </div>`;
+          pop.querySelectorAll('[data-nav]').forEach(b => b.onclick = (ev) => {
+            ev.stopPropagation();
+            viewM += parseInt(b.dataset.nav, 10);
+            if (viewM < 0) { viewM = 11; viewY--; }
+            if (viewM > 11) { viewM = 0; viewY++; }
+            renderCal();
+          });
+          pop.querySelectorAll('[data-iso]').forEach(b => b.onclick = () => {
+            inp.value = b.dataset.iso;
+            sync();
+            closeBentoPop();
+          });
+          pop.querySelector('[data-act="clear"]').onclick = () => { inp.value = ''; sync(); closeBentoPop(); };
+          pop.querySelector('[data-act="today"]').onclick = () => { inp.value = todayIso; sync(); closeBentoPop(); };
+        };
+        renderCal();
+        trig.classList.add('open');
+        activeBentoPop = pop;
+        activeBentoTrig = trig;
+        positionPopover(pop, trig);
+      });
+      inp.parentNode.insertBefore(trig, inp.nextSibling);
+    }
+
+    function syncBentoControls(force = false) {
+      document.querySelectorAll('select').forEach(el => enhanceSelect(el, force));
+      document.querySelectorAll('input[type="date"]').forEach(el => enhanceDate(el, force));
+    }
+    new MutationObserver(() => {
+      if (document.querySelector('select:not([data-bento-init]), input[type="date"]:not([data-bento-init])')) syncBentoControls(false);
+    }).observe(document.body, {childList: true, subtree: true});
+    syncBentoControls();
+
+    loadTariffs();
+  </script>
+
+<script>
+  (function() {
+    let xsvcCatalog = [];
+
+    
+    };
+
+    async function xsvcLoadPublic() {
+      const res = await fetch("/api/extra-services");
+      if (!res.ok) return;
+      xsvcCatalog = await res.json();
+      const sel = document.getElementById("xsvc-select");
+      if (!sel) return;
+      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
+      xsvcRenderPrice();
+    }
+
+    window.xsvcRenderPrice = function() {
+      const sel = document.getElementById("xsvc-select");
+      const hint = document.getElementById("xsvc-price-hint");
+      if (!sel || !hint) return;
+      const item = xsvcCatalog.find(x => x.id === Number(sel.value));
+      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
+    };
+
+    window.xsvcSubmitOrder = async function() {
+      const msg = document.getElementById("xsvc-status-msg");
+      const payBox = document.getElementById("xsvc-pay-box");
+      msg.textContent = "";
+      const payload = {
+        service_id: Number(document.getElementById("xsvc-select").value),
+        spot: document.getElementById("xsvc-spot").value.trim(),
+        phone: document.getElementById("xsvc-phone").value.trim(),
+        comment: document.getElementById("xsvc-comment").value.trim(),
+      };
+      const res = await fetch("/api/extra-services/order", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.textContent = data.detail || "Ошибка оформления";
+        return;
+      }
+      const p = data.payment || {};
+      payBox.style.display = "block";
+      payBox.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
+        <div style="font-size:12px;line-height:1.45;">
+          Место: <b>${data.spot}</b><br>
+          Телефон: <b>${data.phone}</b><br>
+          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
+          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
+        </div>
+        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
+      `;
+    };
+
+    window.xsvcConfirmPaid = async function(orderId) {
+      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
+      const payBox = document.getElementById("xsvc-pay-box");
+      if (res.ok) {
+        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
+      } else {
+        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
+      }
+    };
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    window.xsvcLoadAdmin = async function() {
+      const pass = getAdminPass();
+      const box = document.getElementById("xsvc-admin-box");
+      if (!box) return;
+      if (!pass) { box.style.display = "none"; return; }
+      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!res.ok) { box.style.display = "none"; return; }
+      box.style.display = "block";
+      const rows = await res.json();
+      const list = document.getElementById("xsvc-adm-list");
+      list.innerHTML = rows.map(r => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
+          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
+            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
+          </div>
+        </div>
+      `).join("");
+      window._xsvcAdminRows = rows;
+    };
+
+    window.xsvcEditItem = function(id) {
+      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
+      if (!r) return;
+      document.getElementById("xsvc-edit-id").value = r.id;
+      document.getElementById("xsvc-adm-name").value = r.name;
+      document.getElementById("xsvc-adm-price").value = r.price;
+      document.getElementById("xsvc-adm-desc").value = r.description || "";
+      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
+    };
+
+    window.xsvcResetAdminForm = function() {
+      document.getElementById("xsvc-edit-id").value = "";
+      document.getElementById("xsvc-adm-name").value = "";
+      document.getElementById("xsvc-adm-price").value = "";
+      document.getElementById("xsvc-adm-desc").value = "";
+      document.getElementById("xsvc-adm-active").checked = true;
+    };
+
+    window.xsvcSaveAdmin = async function() {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const id = document.getElementById("xsvc-edit-id").value;
+      const payload = {
+        name: document.getElementById("xsvc-adm-name").value.trim(),
+        price: Number(document.getElementById("xsvc-adm-price").value || 0),
+        description: document.getElementById("xsvc-adm-desc").value.trim(),
+        is_active: document.getElementById("xsvc-adm-active").checked,
+      };
+      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
+      const method = id ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        xsvcResetAdminForm();
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    window.xsvcDeleteItem = async function(id) {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const res = await fetch(`/api/admin/extra-services/${id}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": pass },
+      });
+      if (res.ok) {
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    xsvcLoadPublic();
+    setInterval(xsvcLoadAdmin, 2500);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    const statusBox = document.getElementById("statusResult") || document.getElementById("status-result") || document.querySelector("[data-status-result]");
+    const origFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init) {
+      const resp = await origFetch(input, init);
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (url.includes("/api/status/") && resp.ok) {
+        try {
+          const clone = resp.clone();
+          const data = await clone.json();
+          const spot = data && data.slot && data.slot.spot;
+          if (spot) {
+            setTimeout(() => {
+              const host = statusBox || document.body;
+              if (!document.getElementById("assigned-spot-badge") && host) {
+                const badge = document.createElement("div");
+                badge.id = "assigned-spot-badge";
+                badge.style.cssText = "margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(10,132,255,.14);border:1px solid rgba(10,132,255,.35);font-size:13px;font-weight:600;";
+                badge.textContent = "Назначенное место: " + spot;
+                const targets = Array.from(document.querySelectorAll("div, p, span")).filter(el => el.children.length === 0 && /ячейк|статус|доступ/i.test(el.textContent || ""));
+                if (targets.length) {
+                  targets[targets.length - 1].insertAdjacentElement("afterend", badge);
+                }
+              } else if (document.getElementById("assigned-spot-badge")) {
+                document.getElementById("assigned-spot-badge").textContent = "Назначенное место: " + spot;
+              }
+            }, 60);
+          }
+        } catch (e) {}
+      }
+      return resp;
+    };
+
+    window.xsvcSetUserSpot = async function() {
+      const uid = Number(document.getElementById("xsvc-spot-uid").value);
+      const spot = document.getElementById("xsvc-spot-val").value.trim();
+      const msg = document.getElementById("xsvc-spot-msg");
+      let pass = "";
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) { pass = localStorage.getItem(k); break; }
+      }
+      if (!pass) {
+        for (const k of Object.keys(sessionStorage)) {
+          if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) { pass = sessionStorage.getItem(k); break; }
+        }
+      }
+      const res = await fetch("/api/admin/set-spot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
+        body: JSON.stringify({user_id: uid, spot})
+      });
+      const out = await res.json().catch(() => ({}));
+      msg.textContent = res.ok ? `Назначено место: ${out.spot} (ячейка #${out.slot_number})` : (out.detail || "Ошибка");
+    };
+
+    const admBox = document.getElementById("xsvc-admin-box");
+    if (admBox && !document.getElementById("xsvc-spot-changer")) {
+      const div = document.createElement("div");
+      div.id = "xsvc-spot-changer";
+      div.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid rgba(128,128,140,.25);";
+      div.innerHTML = `
+        <div style="font-weight:600;margin-bottom:6px;font-size:12px;">Назначение / смена места пользователю</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <input id="xsvc-spot-uid" type="number" placeholder="ID клиента" style="width:95px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
+          <input id="xsvc-spot-val" type="text" placeholder="Место (например, 12)" style="flex:1;min-width:120px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
+          <button type="button" onclick="xsvcSetUserSpot()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;font-size:12px;">Сменить место</button>
+        </div>
+        <div id="xsvc-spot-msg" style="margin-top:6px;font-size:12px;"></div>
+      `;
+      admBox.appendChild(div);
+    }
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function applyFiveRowScroll() {
+      const headings = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span, label"))
+        .filter(el => el.children.length === 0 && /^(заявки на оплату|очередь sms)$/i.test((el.textContent || "").trim()));
+
+      for (const h of headings) {
+        let parent = h.parentElement;
+        let container = null;
+        for (let depth = 0; depth < 3 && parent; depth++, parent = parent.parentElement) {
+          const table = parent.querySelector("table tbody") || parent.querySelector("table");
+          if (table) {
+            const rows = Array.from(table.querySelectorAll("tr")).filter(tr => !tr.querySelector("th"));
+            if (rows.length > 5 && rows[4]) {
+              const rowRect = rows[4].getBoundingClientRect();
+              const tblRect = table.getBoundingClientRect();
+              const capH = Math.max(220, Math.round(rowRect.bottom - tblRect.top + 8));
+              container = table.parentElement;
+              if (container && !container.classList.contains("card")) {
+                container.style.maxHeight = capH + "px";
+                container.style.overflowY = "auto";
+                container.classList.add("xsvc-capped-scroll");
+              }
+              break;
+            }
+          }
+        }
+          }
+          const listBox = Array.from(parent.children).find(ch => ch !== h && ch.children && ch.children.length > 5);
+          if (listBox) {
+            const items = Array.from(listBox.children);
+            const firstTop = items[0].getBoundingClientRect().top;
+            const fifthBottom = items[4].getBoundingClientRect().bottom;
+            const capH = Math.max(220, Math.round(fifthBottom - firstTop + 8));
+            listBox.style.maxHeight = capH + "px";
+            listBox.style.overflowY = "auto";
+            listBox.classList.add("xsvc-capped-scroll");
+            break;
+          }
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => applyFiveRowScroll());
+    obs.observe(document.body, { childList: true, subtree: true });
+    setInterval(applyFiveRowScroll, 1500);
+    window.addEventListener("load", applyFiveRowScroll);
+  })();
+  </script>
+
+
+  <script>
+  /* xsvc-render-spots-everywhere */
+  (function() {
+    const origFetch = window.fetch.bind(window);
+    let lastStatusData = null;
+    let lastUsersData = null;
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    function renderUsersTableSpots() {
+      if (!Array.isArray(lastUsersData) || !lastUsersData.length) return;
+      const byId = new Map(lastUsersData.map(u => [String(u.id), u]));
+      const byPhone = new Map(lastUsersData.map(u => [String(u.phone).replace(/\D/g, ""), u]));
+
+      document.querySelectorAll("table tbody tr").forEach(tr => {
+        const cells = Array.from(tr.children);
+        if (cells.length < 4) return;
+        const idText = (cells[0].textContent || "").trim();
+        const phoneDigits = (cells[1].textContent || "").replace(/\D/g, "");
+        const u = byId.get(idText) || byPhone.get(phoneDigits);
+        if (!u || !u.slot) return;
+        const spot = u.slot.spot || u.slot.number || "";
+        const cellSlot = cells[3];
+        if (!cellSlot.querySelector(".xsvc-spot-tag")) {
+          const tag = document.createElement("div");
+          tag.className = "xsvc-spot-tag";
+          tag.style.cssText = "margin-top:4px;font-size:12px;font-weight:600;color:#38bdf8;";
+          tag.textContent = "Место: " + spot;
+          cellSlot.appendChild(tag);
+        } else {
+          cellSlot.querySelector(".xsvc-spot-tag").textContent = "Место: " + spot;
+        }
+        const actCell = cells[cells.length - 1];
+        if (actCell && !actCell.querySelector(".xsvc-edit-spot-btn")) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "xsvc-edit-spot-btn";
+          btn.textContent = "Место";
+          btn.style.cssText = "margin-left:6px;padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:rgba(10,132,255,.15);color:inherit;font-size:11px;cursor:pointer;";
+          btn.onclick = async () => {
+            const nextSpot = prompt("Введите новое место для +" + u.phone + ":", spot);
+            if (!nextSpot || !nextSpot.trim()) return;
+            const pass = getAdminPass();
+            const r = await fetch("/api/admin/set-spot", {
+              method: "POST",
+              headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
+              body: JSON.stringify({user_id: u.id, spot: nextSpot.trim()})
+            });
+            if (r.ok) {
+              u.slot.spot = nextSpot.trim();
+              renderUsersTableSpots();
+            }
+          };
+          actCell.appendChild(btn);
+        }
+      });
+    }
+
+    window.fetch = async function(input, init) {
+      const resp = await origFetch(input, init);
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (url.includes("/api/status/") && resp.ok) {
+        try {
+          lastStatusData = await resp.clone().json();
+          setTimeout(renderStatusSpot, 50);
+        } catch (e) {}
+      }
+      if (url.includes("/api/admin/users") && resp.ok) {
+        try {
+          lastUsersData = await resp.clone().json();
+          setTimeout(renderUsersTableSpots, 80);
+        } catch (e) {}
+      }
+      return resp;
+    };
+
+    setInterval(() => {
+      const oldBadge = document.getElementById("xsvc-status-spot-line"); if (oldBadge) oldBadge.remove();
+      renderUsersTableSpots();
+    }, 1200);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    const HUMAN_STATUS = {
+      "pending_add": "Подключается",
+      "pending": "Ожидает подключения",
+      "active": "Активен",
+      "pending_del": "Отключается",
+      "free": "Не активен",
+      "rejected": "Отклонено",
+      "paid": "Оплачено"
+    };
+
+    function humanizeStatuses(root = document.body) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const raw = node.nodeValue || "";
+        let next = raw;
+        for (const [code, label] of Object.entries(HUMAN_STATUS)) {
+          next = next.replace(new RegExp("\\b" + code + "\\b", "g"), label);
+        }
+        if (next !== raw) {
+          node.nodeValue = next;
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => humanizeStatuses());
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    setInterval(() => humanizeStatuses(), 800);
+    window.addEventListener("load", () => humanizeStatuses());
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function cleanDriverStatusCell() {
+      const statusCard = Array.from(document.querySelectorAll("div, section, .card"))
+        .find(el => /проверить мой статус/i.test(el.innerText || "") && el.querySelector("button"));
+      if (!statusCard) return;
+
+      const walker = document.createTreeWalker(statusCard, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const raw = node.nodeValue || "";
+        if (/ячейка\s*#\s*\d+/i.test(raw)) {
+          node.nodeValue = raw.replace(/ячейка\s*#\s*\d+\s*[·|•-]?\s*/gi, "").trim();
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => cleanDriverStatusCell());
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    setInterval(cleanDriverStatusCell, 800);
+    window.addEventListener("load", cleanDriverStatusCell);
+  })();
+  </script>
+
+<script>
+
+        function xsvcSyncButtons(isOpen) {
+      const openBtn = document.getElementById("xsvc-open-btn");
+      const closeBtn = document.getElementById("xsvc-bottom-close-btn");
+      if (openBtn) openBtn.style.setProperty("display", isOpen ? "none" : "block", "important");
+      if (closeBtn) closeBtn.style.setProperty("display", isOpen ? "block" : "none", "important");
+    }
+
+    window.xsvcOpenForm = async function() {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (!panel) return;
+      panel.style.setProperty("display", "block", "important");
+      panel.dataset.xsvcOpen = "1";
+      xsvcSyncButtons(true);
+      if (typeof xsvcCatalog !== "undefined" && !xsvcCatalog.length && typeof xsvcLoadPublic === "function") {
+        await xsvcLoadPublic();
+      }
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+
+    window.xsvcCloseForm = function() {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (!panel) return;
+      panel.dataset.xsvcOpen = "0";
+      panel.style.setProperty("display", "none", "important");
+      xsvcSyncButtons(false);
+    };
+
+    window.xsvcToggleForm = window.xsvcOpenForm;
+
+    setInterval(() => {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (panel && panel.dataset.xsvcOpen === "1" && window.getComputedStyle(panel).display === "none") {
+        panel.style.setProperty("display", "block", "important");
+      }
+    }, 500);
+
+</script>
+
+  <script>
+  (function() {
+    function wrapAdminTables() {
+      ["orders-body", "users-body"].forEach(id => {
+        const tbody = document.getElementById(id);
+        if (!tbody) return;
+        const table = tbody.closest("table");
+        if (!table) return;
+        if (table.parentElement && !table.parentElement.classList.contains("xsvc-table-scroll")) {
+          const wrapper = document.createElement("div");
+          wrapper.className = "xsvc-table-scroll";
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const wrapper = table.parentElement;
+        if (rows.length > 5 && rows[4] && wrapper) {
+          const top = tbody.getBoundingClientRect().top;
+          const bottom5 = rows[4].getBoundingClientRect().bottom;
+          const h = Math.max(210, Math.round(bottom5 - top + 12));
+          wrapper.style.maxHeight = h + "px";
+        } else if (wrapper) {
+          wrapper.style.maxHeight = "320px";
+        }
+      });
+    }
+    setInterval(wrapAdminTables, 700);
+    window.addEventListener("load", wrapAdminTables);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function cleanOrdersTable() {
+      const tbody = document.getElementById("orders-body");
+      if (!tbody) return;
+      tbody.querySelectorAll("tr").forEach(tr => {
+        // Убираем случайные инъекции кнопок и подписей "Место" из истории заявок на оплату
+        tr.querySelectorAll("button").forEach(btn => {
+          if (/^место$/i.test((btn.textContent || "").trim())) btn.remove();
+        });
+        tr.querySelectorAll("div, span").forEach(el => {
+          if (/^место:\s*/i.test((el.textContent || "").trim())) el.remove();
+        });
+      });
+    }
+    setInterval(cleanOrdersTable, 600);
+    window.addEventListener("load", cleanOrdersTable);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    // 1. Рабочая функция назначения места
+    window.xsvcSetSpot = async function(userId, currentSpot) {
+      const val = prompt("Введите номер парковочного места (оставьте пустым чтобы очистить):", currentSpot || "");
+      if (val === null) return;
+      const r = await fetch("/api/admin/users/" + userId + "/spot", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+        body: JSON.stringify({ spot: val.trim() })
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.detail || "Ошибка сохранения места");
+        return;
+      }
+      if (typeof loadAdmin === "function") loadAdmin();
+    };
+
+    // 2. Убираем дублирующие кнопки "Место" и старые подписи "Место: N" из #users-body
+    function cleanDuplicateSpotButtons() {
+      const tbody = document.getElementById("users-body");
+      if (!tbody) return;
+      tbody.querySelectorAll("tr").forEach(tr => {
+        // Удаляем любые кнопки "Место" вне .adm-actions (это старый инъектор)
+        tr.querySelectorAll("button").forEach(btn => {
+          if (/^место$/i.test((btn.textContent || "").trim()) && !btn.classList.contains("adm-btn-spot")) {
+            btn.remove();
+          }
+        });
+        // Удаляем дублирующую текстовую строку "Место: N" если уже есть .adm-spot-tag
+        if (tr.querySelector(".adm-spot-tag")) {
+          tr.querySelectorAll("div, span").forEach(el => {
+            if (!el.classList.contains("adm-spot-tag") && /^место:\s*/i.test((el.textContent || "").trim())) {
+              el.remove();
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Карточка управления доп. услугами в админке
+    function ensureExtraServicesCard() {
+      if (document.getElementById("adm-xsvc-card")) return;
+      const usersBody = document.getElementById("users-body");
+      if (!usersBody) return;
+      const usersCard = usersBody.closest(".card");
+      if (!usersCard || !usersCard.parentNode) return;
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.id = "adm-xsvc-card";
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+          <h2 style="margin:0;">Дополнительные услуги</h2>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <input id="adm-xsvc-name" placeholder="Название (напр. Мойка кузова)" style="flex:2;min-width:180px;">
+          <input id="adm-xsvc-price" type="number" placeholder="Цена ₽" style="flex:1;min-width:100px;">
+          <button class="adm-btn adm-btn-ok" style="height:38px;padding:0 16px;" onclick="admAddExtraService()">Добавить</button>
+        </div>
+        <div id="adm-xsvc-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      `;
+      usersCard.parentNode.insertBefore(card, usersCard.nextSibling);
+      admLoadExtraServices();
+    }
+
+    window.admLoadExtraServices = async function() {
+      const box = document.getElementById("adm-xsvc-list");
+      if (!box) return;
+      const pass = typeof getAdminPass === "function" ? getAdminPass() : "";
+      if (!pass) return;
+      const r = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!r.ok) return;
+      const items = await r.json();
+      if (!items.length) {
+        box.innerHTML = '<div class="adm-meta">Услуг пока нет. Добавьте первую выше.</div>';
+        return;
+      }
+      box.innerHTML = items.map(x => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);">
+          <div><b>${x.name}</b> <span style="color:#7dd3fc;margin-left:8px;">${x.price} ₽</span></div>
+          <button class="adm-btn adm-btn-del" title="Удалить" onclick="admDelExtraService(${x.id})">×</button>
+        </div>
+      `).join("");
+    };
+
+    window.admAddExtraService = async function() {
+      const nameEl = document.getElementById("adm-xsvc-name");
+      const priceEl = document.getElementById("adm-xsvc-price");
+      const name = (nameEl.value || "").trim();
+      const price = parseInt(priceEl.value || "0", 10);
+      if (!name) return alert("Введите название услуги");
+      const r = await fetch("/api/admin/extra-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+        body: JSON.stringify({ name, price: isNaN(price) ? 0 : price })
+      });
+      if (!r.ok) return alert("Ошибка добавления услуги");
+      nameEl.value = "";
+      priceEl.value = "";
+      admLoadExtraServices();
+    };
+
+    window.admDelExtraService = async function(id) {
+      if (!confirm("Удалить услугу?")) return;
+      await fetch("/api/admin/extra-services/" + id, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": getAdminPass() }
+      });
+      admLoadExtraServices();
+    };
+
+    setInterval(() => {
+      cleanDuplicateSpotButtons();
+      ensureExtraServicesCard();
+    }, 600);
+    window.addEventListener("load", () => {
+      cleanDuplicateSpotButtons();
+      ensureExtraServicesCard();
+    });
+  })();
+  </script>
+
+</body>
+</html>
+

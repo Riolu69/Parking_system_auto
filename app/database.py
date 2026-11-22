@@ -70,6 +70,7 @@ class Vehicle(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     plate_number = Column(String(20), nullable=False)
     car_model = Column(String(100), nullable=True)
+    valid_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="vehicles")
@@ -81,6 +82,7 @@ class Order(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=False)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True)
     amount = Column(Integer, nullable=False)
     promo_code = Column(String(50), nullable=True)
     discount_percent = Column(Integer, default=0)
@@ -89,6 +91,7 @@ class Order(Base):
 
     user = relationship("User", back_populates="orders")
     tariff = relationship("Tariff")
+    vehicle = relationship("Vehicle")
 
 
 class RtuSlot(Base):
@@ -98,6 +101,7 @@ class RtuSlot(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     valid_until = Column(DateTime, nullable=True)
     status = Column(String(20), default="free")
+    spot_label = Column(String(50), nullable=True)
     notified_expiring = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="slot")
@@ -115,6 +119,13 @@ class SmsQueue(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+
+DEFAULT_EXTRA_SERVICES = [
+    {"name": "Мойка автомобиля", "price": 800, "description": "Экспресс-мойка на территории парковки", "is_active": True},
+    {"name": "Зарядка электромобиля", "price": 500, "description": "Подключение к зарядной станции", "is_active": True},
+    {"name": "Подкачка шин / запуск двигателя", "price": 400, "description": "Помощь дежурного на месте", "is_active": True},
+]
 
 DEFAULT_TARIFFS = [
     {"code": "night", "name": "На ночь (21:00–08:00)", "price": 200, "days": 0, "is_night": True},
@@ -145,6 +156,15 @@ async def init_db():
             await conn.execute(text("ALTER TABLE promo_codes ADD COLUMN target_audience VARCHAR(20) DEFAULT 'all'"))
         if "tariff_ids" not in p_cols:
             await conn.execute(text("ALTER TABLE promo_codes ADD COLUMN tariff_ids VARCHAR(255) DEFAULT ''"))
+        s_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(rtu_slots)"))).fetchall()]
+        if "spot_label" not in s_cols:
+            await conn.execute(text("ALTER TABLE rtu_slots ADD COLUMN spot_label VARCHAR(50)"))
+        v_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(vehicles)"))).fetchall()]
+        if "valid_until" not in v_cols:
+            await conn.execute(text("ALTER TABLE vehicles ADD COLUMN valid_until DATETIME"))
+        o_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(orders)"))).fetchall()]
+        if "vehicle_id" not in o_cols:
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN vehicle_id INTEGER"))
 
     async with async_session() as session:
         if (await session.execute(select(RtuSlot.slot_number).limit(1))).scalar() is None:
@@ -153,8 +173,36 @@ async def init_db():
         if (await session.execute(select(Tariff.id).limit(1))).scalar() is None:
             session.add_all([Tariff(**t) for t in DEFAULT_TARIFFS])
 
+        if (await session.execute(select(ExtraService.id).limit(1))).scalar() is None:
+            session.add_all([ExtraService(**s) for s in DEFAULT_EXTRA_SERVICES])
+
         for k, v in DEFAULT_SETTINGS.items():
             if await session.get(AppSetting, k) is None:
                 session.add(AppSetting(key=k, value=v))
 
         await session.commit()
+
+
+class ExtraService(Base):
+    __tablename__ = "extra_services"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    price = Column(Integer, nullable=False)
+    description = Column(Text, default="", nullable=False)
+    is_active = Column(Boolean, default=True)
+
+
+class ServiceOrder(Base):
+    __tablename__ = "service_orders"
+
+    id = Column(Integer, primary_key=True)
+    service_id = Column(Integer, ForeignKey("extra_services.id"), nullable=False)
+    phone = Column(String(20), nullable=False)
+    spot = Column(String(100), nullable=False)
+    comment = Column(Text, default="", nullable=False)
+    amount = Column(Integer, nullable=False)
+    status = Column(String(20), default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    service = relationship("ExtraService")

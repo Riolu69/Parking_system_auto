@@ -112,7 +112,7 @@
     .stat-tile:first-child { background: linear-gradient(155deg, #0a84ff, #5e5ce6); color: #fff; border: none; }
     .stat-tile:first-child .stat-label { color: rgba(255, 255, 255, 0.78); }
     .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
-    .stat-val { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .stat-val { font-size: clamp(17px, 1.7vw, 22px); font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
     /* Карточки */
     .card {
@@ -472,51 +472,11 @@
     }
 
 
-    /* xsvc-scroll-5-rows: не более 5 строк в заявках на оплату и очереди SMS со скроллом */
-    .xsvc-capped-scroll {
-      max-height: 290px;
+        /* === ADMIN TABLES & SCROLL === */
+    .xsvc-table-scroll {
+      max-height: 330px;
       overflow-y: auto;
-      padding-right: 4px;
-      scrollbar-width: thin;
-    }
-
-    /* Убираем лишний общий скролл у карточек и обёрток */
-    .bento, .bento-grid, .grid, .cards, .card, .panel, .wrap, .container, main, section {
-      overflow-y: visible !important;
-      max-height: none !important;
-    }
-    .xsvc-capped-scroll, .xsvc-capped-scroll * {
-      max-height: revert !important;
-    }
-    .xsvc-capped-scroll {
-      max-height: 290px !important;
-      overflow-y: auto !important;
-    }
-
-  
-    /* Внутренний скролл только для таблиц заявок на оплату и клиентов/ячеек */
-    .xsvc-table-scroll {
-      max-height: 320px !important;
-      overflow-y: auto !important;
-      overflow-x: auto !important;
-    }
-    .xsvc-table-scroll table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .xsvc-table-scroll thead th {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: var(--card, #1c1c1e);
-    }
-
-  
-    /* === ADMIN TABLES REDESIGN === */
-    .xsvc-table-scroll {
-      max-height: 330px !important;
-      overflow-y: auto !important;
-      overflow-x: auto !important;
+      overflow-x: auto;
       scrollbar-width: thin;
       scrollbar-color: rgba(255,255,255,.18) transparent;
     }
@@ -529,10 +489,10 @@
       position: sticky;
       top: 0;
       z-index: 3;
-      background: #16171a !important;
-      padding-top: 10px !important;
-      padding-bottom: 10px !important;
-      border-bottom: 1px solid rgba(255,255,255,.08);
+      background: var(--card);
+      padding-top: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
     }
     .adm-actions {
       display: inline-flex;
@@ -546,14 +506,14 @@
       border-radius: 8px;
       font-size: 12px;
       font-weight: 600;
-      border: 1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
-      color: #e5e7eb;
+      border: 1px solid var(--border-strong);
+      background: var(--card-elev);
+      color: var(--text);
       cursor: pointer;
       transition: background .15s, border-color .15s;
       white-space: nowrap;
     }
-    .adm-btn:hover { background: rgba(255,255,255,.12); }
+    .adm-btn:hover { background: var(--border-strong); }
     .adm-btn-ok {
       background: rgba(34,197,94,.16);
       border-color: rgba(34,197,94,.35);
@@ -587,11 +547,10 @@
       border: 1px solid rgba(56,189,248,.25);
     }
     .adm-meta {
-      color: var(--muted, #9ca3af);
+      color: var(--muted);
       font-size: 12px;
       margin-top: 3px;
     }
-
   </style>
 </head>
 <body>
@@ -602,10 +561,7 @@
         <div class="brand-dot">P</div>
         <span>Парковка</span>
       </div>
-      <div class="segmented">
-        <button class="seg-btn active" onclick="switchTab('client', this)">Водитель</button>
-        <button class="seg-btn" onclick="switchTab('admin', this)">Админка</button>
-      </div>
+      <a href="/" id="admin-back-link" class="btn btn-sm btn-secondary hidden">На сайт</a>
     </div>
   </header>
 
@@ -665,268 +621,32 @@
           <div id="chk-result"></div>
           <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
             <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">Помощь / Написать администратору</button>
-          
-      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
-        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
-        <div style="display:grid;gap:10px;">
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
-            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
-            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
-            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
-            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
-            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
-          <div id="xsvc-status-msg" style="font-size:12px;"></div>
-          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
-        </div>
-      </div>
+            <button type="button" id="xsvc-open-btn" onclick="xsvcOpenForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;">Заказать доп услугу</button>
 
-      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
-        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
-        <div style="display:grid;gap:8px;margin-bottom:10px;">
-          <input type="hidden" id="xsvc-edit-id">
-          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          <div style="display:flex;gap:8px;">
-            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
-            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
-            <div style="display:flex;gap:6px;">
-              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
-              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
+            <div id="xsvc-order-panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+              <div style="font-weight:600;margin-bottom:10px;">Заказ дополнительной услуги</div>
+              <div class="field">
+                <label>Услуга и стоимость</label>
+                <select id="xsvc-select" onchange="xsvcRenderPrice()"></select>
+                <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;color:var(--accent);"></div>
+              </div>
+              <div class="field">
+                <label>Место</label>
+                <input id="xsvc-spot" type="text" placeholder="Например, 14" />
+              </div>
+              <div class="field">
+                <label>Номер телефона</label>
+                <input id="xsvc-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
+              </div>
+              <div class="field">
+                <label>Комментарий</label>
+                <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу (необязательно)" />
+              </div>
+              <button type="button" onclick="xsvcSubmitOrder()" class="btn btn-primary">Оплатить</button>
+              <button type="button" id="xsvc-bottom-close-btn" onclick="xsvcCloseForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;">Скрыть</button>
+              <div id="xsvc-status-msg" class="msg"></div>
+              <div id="xsvc-pay-box" class="pay-sheet hidden"></div>
             </div>
-          </div>
-        </div>
-        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
-      </div>
-
-  <script>
-  (function() {
-    let xsvcCatalog = [];
-
-        
-        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      } else {
-        panel.style.display = "none";
-        if (btn) btn.textContent = "Заказать доп услугу";
-      }
-    };
-
-    async function xsvcLoadPublic() {
-      const res = await fetch("/api/extra-services");
-      if (!res.ok) return;
-      xsvcCatalog = await res.json();
-      const sel = document.getElementById("xsvc-select");
-      if (!sel) return;
-      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
-      xsvcRenderPrice();
-    }
-
-    window.xsvcRenderPrice = function() {
-      const sel = document.getElementById("xsvc-select");
-      const hint = document.getElementById("xsvc-price-hint");
-      if (!sel || !hint) return;
-      const item = xsvcCatalog.find(x => x.id === Number(sel.value));
-      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
-    };
-
-    window.xsvcSubmitOrder = async function() {
-      const msg = document.getElementById("xsvc-status-msg");
-      const payBox = document.getElementById("xsvc-pay-box");
-      msg.textContent = "";
-      const payload = {
-        service_id: Number(document.getElementById("xsvc-select").value),
-        spot: document.getElementById("xsvc-spot").value.trim(),
-        phone: document.getElementById("xsvc-phone").value.trim(),
-        comment: document.getElementById("xsvc-comment").value.trim(),
-      };
-      const res = await fetch("/api/extra-services/order", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        msg.textContent = data.detail || "Ошибка оформления";
-        return;
-      }
-      const p = data.payment || {};
-      payBox.style.display = "block";
-      payBox.innerHTML = `
-        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
-        <div style="font-size:12px;line-height:1.45;">
-          Место: <b>${data.spot}</b><br>
-          Телефон: <b>${data.phone}</b><br>
-          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
-          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
-        </div>
-        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
-      `;
-    };
-
-    window.xsvcConfirmPaid = async function(orderId) {
-      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
-      const payBox = document.getElementById("xsvc-pay-box");
-      if (res.ok) {
-        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
-      } else {
-        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
-      }
-    };
-
-    function getAdminPass() {
-      for (const k of Object.keys(localStorage)) {
-        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
-      }
-      for (const k of Object.keys(sessionStorage)) {
-        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
-      }
-      return "";
-    }
-
-    window.xsvcLoadAdmin = async function() {
-      const pass = getAdminPass();
-      const box = document.getElementById("xsvc-admin-box");
-      if (!box) return;
-      if (!pass) { box.style.display = "none"; return; }
-      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
-      if (!res.ok) { box.style.display = "none"; return; }
-      box.style.display = "block";
-      const rows = await res.json();
-      const list = document.getElementById("xsvc-adm-list");
-      list.innerHTML = rows.map(r => `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
-          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
-          <div style="display:flex;gap:6px;">
-            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
-            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
-          </div>
-        </div>
-      `).join("");
-      window._xsvcAdminRows = rows;
-    };
-
-    window.xsvcEditItem = function(id) {
-      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
-      if (!r) return;
-      document.getElementById("xsvc-edit-id").value = r.id;
-      document.getElementById("xsvc-adm-name").value = r.name;
-      document.getElementById("xsvc-adm-price").value = r.price;
-      document.getElementById("xsvc-adm-desc").value = r.description || "";
-      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
-    };
-
-    window.xsvcResetAdminForm = function() {
-      document.getElementById("xsvc-edit-id").value = "";
-      document.getElementById("xsvc-adm-name").value = "";
-      document.getElementById("xsvc-adm-price").value = "";
-      document.getElementById("xsvc-adm-desc").value = "";
-      document.getElementById("xsvc-adm-active").checked = true;
-    };
-
-    window.xsvcSaveAdmin = async function() {
-      const pass = getAdminPass();
-      if (!pass) return;
-      const id = document.getElementById("xsvc-edit-id").value;
-      const payload = {
-        name: document.getElementById("xsvc-adm-name").value.trim(),
-        price: Number(document.getElementById("xsvc-adm-price").value || 0),
-        description: document.getElementById("xsvc-adm-desc").value.trim(),
-        is_active: document.getElementById("xsvc-adm-active").checked,
-      };
-      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
-      const method = id ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        xsvcResetAdminForm();
-        await xsvcLoadAdmin();
-        await xsvcLoadPublic();
-      }
-    };
-
-    window.xsvcDeleteItem = async function(id) {
-      const pass = getAdminPass();
-      if (!pass) return;
-      const res = await fetch(`/api/admin/extra-services/${id}`, {
-        method: "DELETE",
-        headers: { "X-Admin-Password": pass },
-      });
-      if (res.ok) {
-        await xsvcLoadAdmin();
-        await xsvcLoadPublic();
-      }
-    };
-
-    xsvcLoadPublic();
-    setInterval(xsvcLoadAdmin, 2500);
-  })();
-  </script>
-
-      <button type="button" id="xsvc-open-btn" onclick="xsvcOpenForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;">Заказать доп услугу</button><button type="button" id="xsvc-bottom-close-btn" onclick="xsvcCloseForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;display:none;">Скрыть</button>
-
-      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
-        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
-        <div style="display:grid;gap:10px;">
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
-            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
-            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
-            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
-            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
-            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          </div>
-          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
-          <div id="xsvc-status-msg" style="font-size:12px;"></div>
-          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
-        </div>
-      </div>
-
-      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
-        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
-        <div style="display:grid;gap:8px;margin-bottom:10px;">
-          <input type="hidden" id="xsvc-edit-id">
-          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
-          <div style="display:flex;gap:8px;">
-            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
-            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
-            <div style="display:flex;gap:6px;">
-              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
-              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
-            </div>
-          </div>
-        </div>
-        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
-      </div>
-
-  
           </div>
         </div>
       </div>
@@ -963,7 +683,7 @@
           </div>
           <div class="stat-tile">
             <div class="stat-label">За 7 / 30 дней</div>
-            <div class="stat-val" style="font-size:15px;" id="stat-rev-period">—</div>
+            <div class="stat-val" id="stat-rev-period">—</div>
           </div>
           <div class="stat-tile">
             <div class="stat-label">Модем RX100-R4</div>
@@ -986,10 +706,20 @@
 
         <div class="card no-print">
           <div class="card-head"><h2>Заявки на оплату</h2></div>
-          <div class="table-wrap">
+          <div class="table-wrap xsvc-table-scroll">
             <table>
               <thead><tr><th>#</th><th>Время</th><th>Телефон / Авто</th><th>Тариф</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
               <tbody id="orders-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
+          <div class="card-head"><h2>Заказанные доп. услуги</h2></div>
+          <div class="table-wrap xsvc-table-scroll">
+            <table>
+              <thead><tr><th>#</th><th>Время</th><th>Телефон / Место</th><th>Услуга</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
+              <tbody id="service-orders-body"></tbody>
             </table>
           </div>
         </div>
@@ -1055,12 +785,22 @@
             <h2>Клиенты и ячейки RTU5024</h2>
             <input id="user-search" placeholder="Поиск по телефону или номеру..." oninput="renderUsers()" style="width:240px; font-size:13px; padding:6px 10px;" />
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap xsvc-table-scroll">
             <table>
               <thead><tr><th>ID</th><th>Телефон</th><th>Машины</th><th>Ячейка</th><th>Действия</th></tr></thead>
               <tbody id="users-body"></tbody>
             </table>
           </div>
+        </div>
+
+        <div class="card no-print" id="adm-xsvc-card">
+          <div class="card-head"><h2>Дополнительные услуги</h2></div>
+          <div class="bar-row">
+            <input id="adm-xsvc-name" placeholder="Название (напр. Мойка кузова)" style="flex:2;min-width:180px;" />
+            <input id="adm-xsvc-price" type="number" inputmode="numeric" placeholder="Цена ₽" style="width:110px;" />
+            <button class="adm-btn adm-btn-ok" style="height:36px;padding:0 16px;" onclick="admAddExtraService()">Добавить</button>
+          </div>
+          <div id="adm-xsvc-list" style="display:flex;flex-direction:column;gap:8px;"></div>
         </div>
 
         <div class="card no-print">
@@ -1082,7 +822,7 @@
 
         <div class="card no-print">
           <div class="card-head"><h2>Очередь SMS на RX100-R4</h2></div>
-          <div class="table-wrap">
+          <div class="table-wrap xsvc-table-scroll">
             <table>
               <thead><tr><th>ID</th><th>Время</th><th>Ячейка</th><th>Команда</th><th>Статус</th></tr></thead>
               <tbody id="queue-body"></tbody>
@@ -1349,7 +1089,7 @@
         pending_del: 'Отключается',
         free: 'Не активен'
       };
-      const cars = (d.vehicles || []).map(v => `${v.plate}${v.model ? ' · ' + v.model : ''}`).join('<br>') || '—';
+      const cars = (d.vehicles || []).map(v => `<b>${v.plate}</b>${v.model ? ' · ' + v.model : ''} <span style="color:var(--muted)">${v.valid_until ? '— до ' + v.valid_until : '— не оплачена'}</span>`).join('<br>') || '—';
       const gateBtns = (d.slot && d.slot.status === 'active' && d.gate_phone)
         ? `<div class="pay-actions" style="margin-top:10px;">
              <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на парковку</a>
@@ -1391,7 +1131,7 @@
         free: 'Не активен'
       };
       document.getElementById('users-body').innerHTML = filtered.map(u => {
-        const cars = (u.vehicles || []).map(v => v.plate).filter(Boolean).join(', ') || '—';
+        const cars = (u.vehicles || []).map(v => `<div><b>${v.plate}</b> <span class="adm-meta">${v.valid_until ? 'до ' + v.valid_until : 'не оплачена'}</span></div>`).join('') || '—';
         let slotHtml = '<span class="adm-meta">Нет доступа</span>';
         if (u.slot) {
           const stLabel = stMap[u.slot.status] || u.slot.status;
@@ -1480,8 +1220,10 @@
         <td><b>${o.amount} ₽</b></td>
         <td><span class="pill st-${o.status}">${stLabels[o.status] || o.status}</span></td>
         <td style="white-space:nowrap;">${(o.status === 'pending' || o.status === 'paid_by_user') ? `
-          <button class="btn btn-sm btn-ok" onclick="confirmOrder(${o.id})">Ок</button>
-          <button class="btn btn-sm btn-del" onclick="rejectOrder(${o.id})">×</button>
+          <div class="adm-actions">
+            <button class="adm-btn adm-btn-ok" onclick="confirmOrder(${o.id})">Ок</button>
+            <button class="adm-btn adm-btn-del" title="Отклонить" onclick="rejectOrder(${o.id})">×</button>
+          </div>
         ` : ''}</td>
       </tr>`).join('');
 
@@ -1533,10 +1275,14 @@
       renderUsers();
 
       const queue = await qRes.json();
+      const qSt = { pending: 'ожидает', sent: 'отправлено', error: 'ошибка' };
       document.getElementById('queue-body').innerHTML = queue.map(q => `<tr>
         <td>${q.id}</td><td><span style="color:var(--muted)">${q.created_at}</span></td><td>${q.slot ? '#' + q.slot : '—'}</td>
-        <td><code>${q.command}</code></td><td><span class="pill st-${q.status}">${q.status}</span></td>
+        <td><code>${q.command}</code></td><td><span class="pill st-${q.status}">${qSt[q.status] || q.status}</span></td>
       </tr>`).join('');
+
+      admLoadExtraServices();
+      admLoadServiceOrders();
     }
 
     async function openGateNow() {
@@ -2027,616 +1773,125 @@
     }).observe(document.body, {childList: true, subtree: true});
     syncBentoControls();
 
-    loadTariffs();
-  </script>
-
-<script>
-  (function() {
+    
+    /* === Дополнительные услуги и назначение места === */
     let xsvcCatalog = [];
 
-    
-    };
-
     async function xsvcLoadPublic() {
-      const res = await fetch("/api/extra-services");
-      if (!res.ok) return;
-      xsvcCatalog = await res.json();
-      const sel = document.getElementById("xsvc-select");
+      const sel = document.getElementById('xsvc-select');
       if (!sel) return;
-      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
-      xsvcRenderPrice();
+      try {
+        const res = await fetch('/api/extra-services');
+        if (!res.ok) return;
+        xsvcCatalog = await res.json();
+        if (!xsvcCatalog.length) {
+          sel.innerHTML = '<option value="">Нет доступных услуг</option>';
+        } else {
+          sel.innerHTML = xsvcCatalog.map(item => `<option value="${item.id}">${item.name} — ${item.price} ₽</option>`).join('');
+        }
+        if (sel._bentoSync) sel._bentoSync();
+        xsvcRenderPrice();
+      } catch (e) {}
     }
 
-    window.xsvcRenderPrice = function() {
-      const sel = document.getElementById("xsvc-select");
-      const hint = document.getElementById("xsvc-price-hint");
+    function xsvcRenderPrice() {
+      const sel = document.getElementById('xsvc-select');
+      const hint = document.getElementById('xsvc-price-hint');
       if (!sel || !hint) return;
       const item = xsvcCatalog.find(x => x.id === Number(sel.value));
-      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
-    };
+      hint.textContent = item ? `К оплате: ${item.price} ₽` : '';
+    }
 
-    window.xsvcSubmitOrder = async function() {
-      const msg = document.getElementById("xsvc-status-msg");
-      const payBox = document.getElementById("xsvc-pay-box");
-      msg.textContent = "";
-      const payload = {
-        service_id: Number(document.getElementById("xsvc-select").value),
-        spot: document.getElementById("xsvc-spot").value.trim(),
-        phone: document.getElementById("xsvc-phone").value.trim(),
-        comment: document.getElementById("xsvc-comment").value.trim(),
-      };
-      const res = await fetch("/api/extra-services/order", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload),
+    async function xsvcOpenForm() {
+      const panel = document.getElementById('xsvc-order-panel');
+      const openBtn = document.getElementById('xsvc-open-btn');
+      if (!panel) return;
+      panel.classList.remove('hidden');
+      if (openBtn) openBtn.classList.add('hidden');
+      await xsvcLoadPublic();
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function xsvcCloseForm() {
+      const panel = document.getElementById('xsvc-order-panel');
+      const openBtn = document.getElementById('xsvc-open-btn');
+      if (panel) panel.classList.add('hidden');
+      if (openBtn) openBtn.classList.remove('hidden');
+    }
+
+    async function xsvcSubmitOrder() {
+      const msg = document.getElementById('xsvc-status-msg');
+      const payBox = document.getElementById('xsvc-pay-box');
+      msg.textContent = '';
+      payBox.classList.add('hidden');
+      const svcId = Number(document.getElementById('xsvc-select').value);
+      const phone = document.getElementById('xsvc-phone').value.trim();
+      const spot = document.getElementById('xsvc-spot').value.trim();
+      const comment = document.getElementById('xsvc-comment').value.trim();
+      if (!svcId) { msg.textContent = 'Выберите услугу.'; msg.className = 'msg err'; return; }
+      if (!phone) { msg.textContent = 'Укажите номер телефона.'; msg.className = 'msg err'; return; }
+
+      const res = await fetch('/api/extra-services/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service_id: svcId, phone, spot, comment })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        msg.textContent = data.detail || "Ошибка оформления";
+        msg.textContent = data.detail || 'Ошибка оформления заказа';
+        msg.className = 'msg err';
         return;
       }
+      const item = xsvcCatalog.find(x => x.id === svcId);
       const p = data.payment || {};
-      payBox.style.display = "block";
+      payBox.classList.remove('hidden');
       payBox.innerHTML = `
-        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
-        <div style="font-size:12px;line-height:1.45;">
-          Место: <b>${data.spot}</b><br>
-          Телефон: <b>${data.phone}</b><br>
-          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
-          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
+        <div style="font-weight:600;margin-bottom:6px;">Заказ #${data.order_id} · ${item ? item.name : 'Доп. услуга'} — ${data.amount} ₽</div>
+        <div>СБП: <b>${p.sbp_phone || ''}</b> (${p.sbp_bank || ''})</div>
+        <div style="color:var(--muted);margin-bottom:6px;">Получатель: ${p.sbp_recipient || ''}</div>
+        <div class="pay-actions">
+          <button class="btn btn-sm btn-secondary" onclick="copyText('${p.sbp_phone || ''}', this)">Скопировать номер</button>
+          <button class="btn btn-sm btn-ok" onclick="xsvcMarkPaid(${data.order_id}, this)">Я оплатил</button>
         </div>
-        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
       `;
-    };
+    }
 
-    window.xsvcConfirmPaid = async function(orderId) {
-      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
-      const payBox = document.getElementById("xsvc-pay-box");
-      if (res.ok) {
-        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
+    async function xsvcMarkPaid(orderId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Отправка...';
+      const r = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: 'POST' });
+      if (r.ok) {
+        btn.textContent = 'Отправлено админу';
+        btn.className = 'btn btn-sm btn-ok';
       } else {
-        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
-      }
-    };
-
-    function getAdminPass() {
-      for (const k of Object.keys(localStorage)) {
-        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
-      }
-      for (const k of Object.keys(sessionStorage)) {
-        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
-      }
-      return "";
-    }
-
-    window.xsvcLoadAdmin = async function() {
-      const pass = getAdminPass();
-      const box = document.getElementById("xsvc-admin-box");
-      if (!box) return;
-      if (!pass) { box.style.display = "none"; return; }
-      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
-      if (!res.ok) { box.style.display = "none"; return; }
-      box.style.display = "block";
-      const rows = await res.json();
-      const list = document.getElementById("xsvc-adm-list");
-      list.innerHTML = rows.map(r => `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
-          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
-          <div style="display:flex;gap:6px;">
-            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
-            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
-          </div>
-        </div>
-      `).join("");
-      window._xsvcAdminRows = rows;
-    };
-
-    window.xsvcEditItem = function(id) {
-      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
-      if (!r) return;
-      document.getElementById("xsvc-edit-id").value = r.id;
-      document.getElementById("xsvc-adm-name").value = r.name;
-      document.getElementById("xsvc-adm-price").value = r.price;
-      document.getElementById("xsvc-adm-desc").value = r.description || "";
-      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
-    };
-
-    window.xsvcResetAdminForm = function() {
-      document.getElementById("xsvc-edit-id").value = "";
-      document.getElementById("xsvc-adm-name").value = "";
-      document.getElementById("xsvc-adm-price").value = "";
-      document.getElementById("xsvc-adm-desc").value = "";
-      document.getElementById("xsvc-adm-active").checked = true;
-    };
-
-    window.xsvcSaveAdmin = async function() {
-      const pass = getAdminPass();
-      if (!pass) return;
-      const id = document.getElementById("xsvc-edit-id").value;
-      const payload = {
-        name: document.getElementById("xsvc-adm-name").value.trim(),
-        price: Number(document.getElementById("xsvc-adm-price").value || 0),
-        description: document.getElementById("xsvc-adm-desc").value.trim(),
-        is_active: document.getElementById("xsvc-adm-active").checked,
-      };
-      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
-      const method = id ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        xsvcResetAdminForm();
-        await xsvcLoadAdmin();
-        await xsvcLoadPublic();
-      }
-    };
-
-    window.xsvcDeleteItem = async function(id) {
-      const pass = getAdminPass();
-      if (!pass) return;
-      const res = await fetch(`/api/admin/extra-services/${id}`, {
-        method: "DELETE",
-        headers: { "X-Admin-Password": pass },
-      });
-      if (res.ok) {
-        await xsvcLoadAdmin();
-        await xsvcLoadPublic();
-      }
-    };
-
-    xsvcLoadPublic();
-    setInterval(xsvcLoadAdmin, 2500);
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    const statusBox = document.getElementById("statusResult") || document.getElementById("status-result") || document.querySelector("[data-status-result]");
-    const origFetch = window.fetch.bind(window);
-
-    window.fetch = async function(input, init) {
-      const resp = await origFetch(input, init);
-      const url = typeof input === "string" ? input : (input && input.url) || "";
-      if (url.includes("/api/status/") && resp.ok) {
-        try {
-          const clone = resp.clone();
-          const data = await clone.json();
-          const spot = data && data.slot && data.slot.spot;
-          if (spot) {
-            setTimeout(() => {
-              const host = statusBox || document.body;
-              if (!document.getElementById("assigned-spot-badge") && host) {
-                const badge = document.createElement("div");
-                badge.id = "assigned-spot-badge";
-                badge.style.cssText = "margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(10,132,255,.14);border:1px solid rgba(10,132,255,.35);font-size:13px;font-weight:600;";
-                badge.textContent = "Назначенное место: " + spot;
-                const targets = Array.from(document.querySelectorAll("div, p, span")).filter(el => el.children.length === 0 && /ячейк|статус|доступ/i.test(el.textContent || ""));
-                if (targets.length) {
-                  targets[targets.length - 1].insertAdjacentElement("afterend", badge);
-                }
-              } else if (document.getElementById("assigned-spot-badge")) {
-                document.getElementById("assigned-spot-badge").textContent = "Назначенное место: " + spot;
-              }
-            }, 60);
-          }
-        } catch (e) {}
-      }
-      return resp;
-    };
-
-    window.xsvcSetUserSpot = async function() {
-      const uid = Number(document.getElementById("xsvc-spot-uid").value);
-      const spot = document.getElementById("xsvc-spot-val").value.trim();
-      const msg = document.getElementById("xsvc-spot-msg");
-      let pass = "";
-      for (const k of Object.keys(localStorage)) {
-        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) { pass = localStorage.getItem(k); break; }
-      }
-      if (!pass) {
-        for (const k of Object.keys(sessionStorage)) {
-          if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) { pass = sessionStorage.getItem(k); break; }
-        }
-      }
-      const res = await fetch("/api/admin/set-spot", {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
-        body: JSON.stringify({user_id: uid, spot})
-      });
-      const out = await res.json().catch(() => ({}));
-      msg.textContent = res.ok ? `Назначено место: ${out.spot} (ячейка #${out.slot_number})` : (out.detail || "Ошибка");
-    };
-
-    const admBox = document.getElementById("xsvc-admin-box");
-    if (admBox && !document.getElementById("xsvc-spot-changer")) {
-      const div = document.createElement("div");
-      div.id = "xsvc-spot-changer";
-      div.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid rgba(128,128,140,.25);";
-      div.innerHTML = `
-        <div style="font-weight:600;margin-bottom:6px;font-size:12px;">Назначение / смена места пользователю</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <input id="xsvc-spot-uid" type="number" placeholder="ID клиента" style="width:95px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
-          <input id="xsvc-spot-val" type="text" placeholder="Место (например, 12)" style="flex:1;min-width:120px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
-          <button type="button" onclick="xsvcSetUserSpot()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;font-size:12px;">Сменить место</button>
-        </div>
-        <div id="xsvc-spot-msg" style="margin-top:6px;font-size:12px;"></div>
-      `;
-      admBox.appendChild(div);
-    }
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    function applyFiveRowScroll() {
-      const headings = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span, label"))
-        .filter(el => el.children.length === 0 && /^(заявки на оплату|очередь sms)$/i.test((el.textContent || "").trim()));
-
-      for (const h of headings) {
-        let parent = h.parentElement;
-        let container = null;
-        for (let depth = 0; depth < 3 && parent; depth++, parent = parent.parentElement) {
-          const table = parent.querySelector("table tbody") || parent.querySelector("table");
-          if (table) {
-            const rows = Array.from(table.querySelectorAll("tr")).filter(tr => !tr.querySelector("th"));
-            if (rows.length > 5 && rows[4]) {
-              const rowRect = rows[4].getBoundingClientRect();
-              const tblRect = table.getBoundingClientRect();
-              const capH = Math.max(220, Math.round(rowRect.bottom - tblRect.top + 8));
-              container = table.parentElement;
-              if (container && !container.classList.contains("card")) {
-                container.style.maxHeight = capH + "px";
-                container.style.overflowY = "auto";
-                container.classList.add("xsvc-capped-scroll");
-              }
-              break;
-            }
-          }
-        }
-          }
-          const listBox = Array.from(parent.children).find(ch => ch !== h && ch.children && ch.children.length > 5);
-          if (listBox) {
-            const items = Array.from(listBox.children);
-            const firstTop = items[0].getBoundingClientRect().top;
-            const fifthBottom = items[4].getBoundingClientRect().bottom;
-            const capH = Math.max(220, Math.round(fifthBottom - firstTop + 8));
-            listBox.style.maxHeight = capH + "px";
-            listBox.style.overflowY = "auto";
-            listBox.classList.add("xsvc-capped-scroll");
-            break;
-          }
-        }
+        btn.disabled = false;
+        btn.textContent = 'Я оплатил';
+        alert('Не удалось отправить уведомление об оплате');
       }
     }
 
-    const obs = new MutationObserver(() => applyFiveRowScroll());
-    obs.observe(document.body, { childList: true, subtree: true });
-    setInterval(applyFiveRowScroll, 1500);
-    window.addEventListener("load", applyFiveRowScroll);
-  })();
-  </script>
-
-
-  <script>
-  /* xsvc-render-spots-everywhere */
-  (function() {
-    const origFetch = window.fetch.bind(window);
-    let lastStatusData = null;
-    let lastUsersData = null;
-
-    function getAdminPass() {
-      for (const k of Object.keys(localStorage)) {
-        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
-      }
-      for (const k of Object.keys(sessionStorage)) {
-        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
-      }
-      return "";
-    }
-
-    function renderUsersTableSpots() {
-      if (!Array.isArray(lastUsersData) || !lastUsersData.length) return;
-      const byId = new Map(lastUsersData.map(u => [String(u.id), u]));
-      const byPhone = new Map(lastUsersData.map(u => [String(u.phone).replace(/\D/g, ""), u]));
-
-      document.querySelectorAll("table tbody tr").forEach(tr => {
-        const cells = Array.from(tr.children);
-        if (cells.length < 4) return;
-        const idText = (cells[0].textContent || "").trim();
-        const phoneDigits = (cells[1].textContent || "").replace(/\D/g, "");
-        const u = byId.get(idText) || byPhone.get(phoneDigits);
-        if (!u || !u.slot) return;
-        const spot = u.slot.spot || u.slot.number || "";
-        const cellSlot = cells[3];
-        if (!cellSlot.querySelector(".xsvc-spot-tag")) {
-          const tag = document.createElement("div");
-          tag.className = "xsvc-spot-tag";
-          tag.style.cssText = "margin-top:4px;font-size:12px;font-weight:600;color:#38bdf8;";
-          tag.textContent = "Место: " + spot;
-          cellSlot.appendChild(tag);
-        } else {
-          cellSlot.querySelector(".xsvc-spot-tag").textContent = "Место: " + spot;
-        }
-        const actCell = cells[cells.length - 1];
-        if (actCell && !actCell.querySelector(".xsvc-edit-spot-btn")) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "xsvc-edit-spot-btn";
-          btn.textContent = "Место";
-          btn.style.cssText = "margin-left:6px;padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:rgba(10,132,255,.15);color:inherit;font-size:11px;cursor:pointer;";
-          btn.onclick = async () => {
-            const nextSpot = prompt("Введите новое место для +" + u.phone + ":", spot);
-            if (!nextSpot || !nextSpot.trim()) return;
-            const pass = getAdminPass();
-            const r = await fetch("/api/admin/set-spot", {
-              method: "POST",
-              headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
-              body: JSON.stringify({user_id: u.id, spot: nextSpot.trim()})
-            });
-            if (r.ok) {
-              u.slot.spot = nextSpot.trim();
-              renderUsersTableSpots();
-            }
-          };
-          actCell.appendChild(btn);
-        }
-      });
-    }
-
-    window.fetch = async function(input, init) {
-      const resp = await origFetch(input, init);
-      const url = typeof input === "string" ? input : (input && input.url) || "";
-      if (url.includes("/api/status/") && resp.ok) {
-        try {
-          lastStatusData = await resp.clone().json();
-          setTimeout(renderStatusSpot, 50);
-        } catch (e) {}
-      }
-      if (url.includes("/api/admin/users") && resp.ok) {
-        try {
-          lastUsersData = await resp.clone().json();
-          setTimeout(renderUsersTableSpots, 80);
-        } catch (e) {}
-      }
-      return resp;
-    };
-
-    setInterval(() => {
-      const oldBadge = document.getElementById("xsvc-status-spot-line"); if (oldBadge) oldBadge.remove();
-      renderUsersTableSpots();
-    }, 1200);
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    const HUMAN_STATUS = {
-      "pending_add": "Подключается",
-      "pending": "Ожидает подключения",
-      "active": "Активен",
-      "pending_del": "Отключается",
-      "free": "Не активен",
-      "rejected": "Отклонено",
-      "paid": "Оплачено"
-    };
-
-    function humanizeStatuses(root = document.body) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        const raw = node.nodeValue || "";
-        let next = raw;
-        for (const [code, label] of Object.entries(HUMAN_STATUS)) {
-          next = next.replace(new RegExp("\\b" + code + "\\b", "g"), label);
-        }
-        if (next !== raw) {
-          node.nodeValue = next;
-        }
-      }
-    }
-
-    const obs = new MutationObserver(() => humanizeStatuses());
-    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-    setInterval(() => humanizeStatuses(), 800);
-    window.addEventListener("load", () => humanizeStatuses());
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    function cleanDriverStatusCell() {
-      const statusCard = Array.from(document.querySelectorAll("div, section, .card"))
-        .find(el => /проверить мой статус/i.test(el.innerText || "") && el.querySelector("button"));
-      if (!statusCard) return;
-
-      const walker = document.createTreeWalker(statusCard, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        const raw = node.nodeValue || "";
-        if (/ячейка\s*#\s*\d+/i.test(raw)) {
-          node.nodeValue = raw.replace(/ячейка\s*#\s*\d+\s*[·|•-]?\s*/gi, "").trim();
-        }
-      }
-    }
-
-    const obs = new MutationObserver(() => cleanDriverStatusCell());
-    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-    setInterval(cleanDriverStatusCell, 800);
-    window.addEventListener("load", cleanDriverStatusCell);
-  })();
-  </script>
-
-<script>
-
-        function xsvcSyncButtons(isOpen) {
-      const openBtn = document.getElementById("xsvc-open-btn");
-      const closeBtn = document.getElementById("xsvc-bottom-close-btn");
-      if (openBtn) openBtn.style.setProperty("display", isOpen ? "none" : "block", "important");
-      if (closeBtn) closeBtn.style.setProperty("display", isOpen ? "block" : "none", "important");
-    }
-
-    window.xsvcOpenForm = async function() {
-      const panel = document.getElementById("xsvc-order-panel");
-      if (!panel) return;
-      panel.style.setProperty("display", "block", "important");
-      panel.dataset.xsvcOpen = "1";
-      xsvcSyncButtons(true);
-      if (typeof xsvcCatalog !== "undefined" && !xsvcCatalog.length && typeof xsvcLoadPublic === "function") {
-        await xsvcLoadPublic();
-      }
-      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    };
-
-    window.xsvcCloseForm = function() {
-      const panel = document.getElementById("xsvc-order-panel");
-      if (!panel) return;
-      panel.dataset.xsvcOpen = "0";
-      panel.style.setProperty("display", "none", "important");
-      xsvcSyncButtons(false);
-    };
-
-    window.xsvcToggleForm = window.xsvcOpenForm;
-
-    setInterval(() => {
-      const panel = document.getElementById("xsvc-order-panel");
-      if (panel && panel.dataset.xsvcOpen === "1" && window.getComputedStyle(panel).display === "none") {
-        panel.style.setProperty("display", "block", "important");
-      }
-    }, 500);
-
-</script>
-
-  <script>
-  (function() {
-    function wrapAdminTables() {
-      ["orders-body", "users-body"].forEach(id => {
-        const tbody = document.getElementById(id);
-        if (!tbody) return;
-        const table = tbody.closest("table");
-        if (!table) return;
-        if (table.parentElement && !table.parentElement.classList.contains("xsvc-table-scroll")) {
-          const wrapper = document.createElement("div");
-          wrapper.className = "xsvc-table-scroll";
-          table.parentNode.insertBefore(wrapper, table);
-          wrapper.appendChild(table);
-        }
-        const rows = Array.from(tbody.querySelectorAll("tr"));
-        const wrapper = table.parentElement;
-        if (rows.length > 5 && rows[4] && wrapper) {
-          const top = tbody.getBoundingClientRect().top;
-          const bottom5 = rows[4].getBoundingClientRect().bottom;
-          const h = Math.max(210, Math.round(bottom5 - top + 12));
-          wrapper.style.maxHeight = h + "px";
-        } else if (wrapper) {
-          wrapper.style.maxHeight = "320px";
-        }
-      });
-    }
-    setInterval(wrapAdminTables, 700);
-    window.addEventListener("load", wrapAdminTables);
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    function cleanOrdersTable() {
-      const tbody = document.getElementById("orders-body");
-      if (!tbody) return;
-      tbody.querySelectorAll("tr").forEach(tr => {
-        // Убираем случайные инъекции кнопок и подписей "Место" из истории заявок на оплату
-        tr.querySelectorAll("button").forEach(btn => {
-          if (/^место$/i.test((btn.textContent || "").trim())) btn.remove();
-        });
-        tr.querySelectorAll("div, span").forEach(el => {
-          if (/^место:\s*/i.test((el.textContent || "").trim())) el.remove();
-        });
-      });
-    }
-    setInterval(cleanOrdersTable, 600);
-    window.addEventListener("load", cleanOrdersTable);
-  })();
-  </script>
-
-
-  <script>
-  (function() {
-    // 1. Рабочая функция назначения места
-    window.xsvcSetSpot = async function(userId, currentSpot) {
-      const val = prompt("Введите номер парковочного места (оставьте пустым чтобы очистить):", currentSpot || "");
+    async function xsvcSetSpot(userId, currentSpot) {
+      const val = prompt('Введите номер парковочного места (оставьте пустым чтобы очистить):', currentSpot || '');
       if (val === null) return;
-      const r = await fetch("/api/admin/users/" + userId + "/spot", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+      const r = await fetch('/api/admin/users/' + userId + '/spot', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass() },
         body: JSON.stringify({ spot: val.trim() })
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        alert(err.detail || "Ошибка сохранения места");
+        alert(err.detail || 'Ошибка сохранения места');
         return;
       }
-      if (typeof loadAdmin === "function") loadAdmin();
-    };
-
-    // 2. Убираем дублирующие кнопки "Место" и старые подписи "Место: N" из #users-body
-    function cleanDuplicateSpotButtons() {
-      const tbody = document.getElementById("users-body");
-      if (!tbody) return;
-      tbody.querySelectorAll("tr").forEach(tr => {
-        // Удаляем любые кнопки "Место" вне .adm-actions (это старый инъектор)
-        tr.querySelectorAll("button").forEach(btn => {
-          if (/^место$/i.test((btn.textContent || "").trim()) && !btn.classList.contains("adm-btn-spot")) {
-            btn.remove();
-          }
-        });
-        // Удаляем дублирующую текстовую строку "Место: N" если уже есть .adm-spot-tag
-        if (tr.querySelector(".adm-spot-tag")) {
-          tr.querySelectorAll("div, span").forEach(el => {
-            if (!el.classList.contains("adm-spot-tag") && /^место:\s*/i.test((el.textContent || "").trim())) {
-              el.remove();
-            }
-          });
-        }
-      });
+      loadAdmin();
     }
 
-    // 3. Карточка управления доп. услугами в админке
-    function ensureExtraServicesCard() {
-      if (document.getElementById("adm-xsvc-card")) return;
-      const usersBody = document.getElementById("users-body");
-      if (!usersBody) return;
-      const usersCard = usersBody.closest(".card");
-      if (!usersCard || !usersCard.parentNode) return;
-
-      const card = document.createElement("div");
-      card.className = "card";
-      card.id = "adm-xsvc-card";
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-          <h2 style="margin:0;">Дополнительные услуги</h2>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <input id="adm-xsvc-name" placeholder="Название (напр. Мойка кузова)" style="flex:2;min-width:180px;">
-          <input id="adm-xsvc-price" type="number" placeholder="Цена ₽" style="flex:1;min-width:100px;">
-          <button class="adm-btn adm-btn-ok" style="height:38px;padding:0 16px;" onclick="admAddExtraService()">Добавить</button>
-        </div>
-        <div id="adm-xsvc-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-      `;
-      usersCard.parentNode.insertBefore(card, usersCard.nextSibling);
-      admLoadExtraServices();
-    }
-
-    window.admLoadExtraServices = async function() {
-      const box = document.getElementById("adm-xsvc-list");
+    async function admLoadExtraServices() {
+      const box = document.getElementById('adm-xsvc-list');
       if (!box) return;
-      const pass = typeof getAdminPass === "function" ? getAdminPass() : "";
+      const pass = getAdminPass();
       if (!pass) return;
-      const r = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      const r = await fetch('/api/admin/extra-services', { headers: { 'X-Admin-Password': pass } });
       if (!r.ok) return;
       const items = await r.json();
       if (!items.length) {
@@ -2644,50 +1899,119 @@
         return;
       }
       box.innerHTML = items.map(x => `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);">
-          <div><b>${x.name}</b> <span style="color:#7dd3fc;margin-left:8px;">${x.price} ₽</span></div>
-          <button class="adm-btn adm-btn-del" title="Удалить" onclick="admDelExtraService(${x.id})">×</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-radius:12px;background:var(--card-elev);border:1px solid var(--border);">
+          <input class="inline-inp" id="xsvc-name-${x.id}" value="${(x.name || '').replace(/"/g, '&quot;')}" style="flex:2;min-width:180px;">
+          <input class="inline-inp" id="xsvc-price-${x.id}" type="number" inputmode="numeric" value="${x.price}" style="width:100px;">
+          <div class="adm-actions">
+            <button class="adm-btn adm-btn-ok" onclick="admSaveExtraService(${x.id})">Сохранить</button>
+            <button class="adm-btn adm-btn-del" title="Удалить" onclick="admDelExtraService(${x.id})">×</button>
+          </div>
         </div>
-      `).join("");
-    };
+      `).join('');
+    }
 
-    window.admAddExtraService = async function() {
-      const nameEl = document.getElementById("adm-xsvc-name");
-      const priceEl = document.getElementById("adm-xsvc-price");
-      const name = (nameEl.value || "").trim();
-      const price = parseInt(priceEl.value || "0", 10);
-      if (!name) return alert("Введите название услуги");
-      const r = await fetch("/api/admin/extra-services", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+    async function admSaveExtraService(id) {
+      const name = (document.getElementById('xsvc-name-' + id).value || '').trim();
+      const price = parseInt(document.getElementById('xsvc-price-' + id).value || '0', 10);
+      if (!name) return alert('Введите название услуги');
+      const r = await fetch('/api/admin/extra-services/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass() },
+        body: JSON.stringify({ name, price: isNaN(price) ? 0 : price, is_active: true })
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        return alert(err.detail || 'Ошибка сохранения услуги');
+      }
+      await admLoadExtraServices();
+      await xsvcLoadPublic();
+    }
+
+    async function admAddExtraService() {
+      const nameEl = document.getElementById('adm-xsvc-name');
+      const priceEl = document.getElementById('adm-xsvc-price');
+      const name = (nameEl.value || '').trim();
+      const price = parseInt(priceEl.value || '0', 10);
+      if (!name) return alert('Введите название услуги');
+      const r = await fetch('/api/admin/extra-services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass() },
         body: JSON.stringify({ name, price: isNaN(price) ? 0 : price })
       });
-      if (!r.ok) return alert("Ошибка добавления услуги");
-      nameEl.value = "";
-      priceEl.value = "";
-      admLoadExtraServices();
-    };
+      if (!r.ok) return alert('Ошибка добавления услуги');
+      nameEl.value = '';
+      priceEl.value = '';
+      await admLoadExtraServices();
+      await xsvcLoadPublic();
+    }
 
-    window.admDelExtraService = async function(id) {
-      if (!confirm("Удалить услугу?")) return;
-      await fetch("/api/admin/extra-services/" + id, {
-        method: "DELETE",
-        headers: { "X-Admin-Password": getAdminPass() }
+
+    async function admLoadServiceOrders() {
+      const tbody = document.getElementById('service-orders-body');
+      if (!tbody) return;
+      const r = await fetch('/api/admin/service-orders', { headers: { 'X-Admin-Password': getAdminPass() } });
+      if (!r.ok) return;
+      const items = await r.json();
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">Заказов доп. услуг пока нет</td></tr>';
+        return;
+      }
+      const stLabels = { pending: 'ожидает', paid_by_user: 'оплачено клиентом', paid: 'подтверждена', rejected: 'отклонена' };
+      tbody.innerHTML = items.map(o => `<tr>
+        <td>${o.id}</td>
+        <td><span style="color:var(--muted)">${o.created_at}</span></td>
+        <td><b>+${o.phone}</b><br><span style="color:#7dd3fc;font-size:12px;">Место: ${o.spot}</span></td>
+        <td>${o.service_name}${o.comment ? `<br><span style="color:var(--muted);font-size:11px;">${o.comment}</span>` : ''}</td>
+        <td><b>${o.amount} ₽</b></td>
+        <td><span class="pill st-${o.status}">${stLabels[o.status] || o.status}</span></td>
+        <td style="white-space:nowrap;">${(o.status === 'pending' || o.status === 'paid_by_user') ? `
+          <div class="adm-actions">
+            <button class="adm-btn adm-btn-ok" onclick="confirmServiceOrder(${o.id})">Ок</button>
+            <button class="adm-btn adm-btn-del" title="Отклонить" onclick="rejectServiceOrder(${o.id})">×</button>
+          </div>
+        ` : ''}</td>
+      </tr>`).join('');
+    }
+
+    async function confirmServiceOrder(id) {
+      await fetch(`/api/admin/service-orders/${id}/confirm`, { method: 'POST', headers: { 'X-Admin-Password': getAdminPass() } });
+      loadAdmin();
+    }
+
+    async function rejectServiceOrder(id) {
+      await fetch(`/api/admin/service-orders/${id}/reject`, { method: 'POST', headers: { 'X-Admin-Password': getAdminPass() } });
+      loadAdmin();
+    }
+
+    async function admDelExtraService(id) {
+      if (!confirm('Удалить услугу?')) return;
+      await fetch('/api/admin/extra-services/' + id, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Password': getAdminPass() }
       });
-      admLoadExtraServices();
-    };
+      await admLoadExtraServices();
+      await xsvcLoadPublic();
+    }
 
-    setInterval(() => {
-      cleanDuplicateSpotButtons();
-      ensureExtraServicesCard();
-    }, 600);
-    window.addEventListener("load", () => {
-      cleanDuplicateSpotButtons();
-      ensureExtraServicesCard();
-    });
-  })();
+    
+    function initRoute() {
+      const isAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
+      if (isAdmin) {
+        document.getElementById('tab-client').classList.add('hidden');
+        document.getElementById('tab-admin').classList.remove('hidden');
+        const back = document.getElementById('admin-back-link');
+        if (back) back.classList.remove('hidden');
+        if (localStorage.getItem('adm_pass')) {
+          loadAdmin();
+        }
+      }
+    }
+    initRoute();
+    window.addEventListener('hashchange', initRoute);
+
+    loadTariffs();
+    xsvcLoadPublic();
   </script>
-
 </body>
 </html>
 

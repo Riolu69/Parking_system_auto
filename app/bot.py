@@ -14,11 +14,12 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.database import async_session, User, Tariff, Order, RtuSlot
+from app.database import async_session, User, Tariff, Order, RtuSlot, ExtraService, ServiceOrder
 from app.services import (
     register_user_and_car, create_order, validate_promo_code, parse_tariff_ids,
     get_app_settings, mark_order_paid_by_user, confirm_order, reject_order,
-    queue_open_gate, get_finance_stats
+    queue_open_gate, get_finance_stats,
+    list_extra_services, create_service_order, mark_service_order_paid
 )
 
 bot = Bot(token=settings.BOT_TOKEN, session=(AiohttpSession(proxy=settings.BOT_PROXY) if settings.BOT_PROXY else None))
@@ -31,6 +32,9 @@ class RegState(StatesGroup):
     waiting_model = State()
     waiting_promo = State()
     waiting_support = State()
+    waiting_svc_spot = State()
+    waiting_svc_phone = State()
+    waiting_svc_comment = State()
 
 
 class AdminState(StatesGroup):
@@ -48,6 +52,7 @@ def kb_contact():
 def kb_main():
     rows = [
         [KeyboardButton(text="Мой статус"), KeyboardButton(text="Выбрать тариф / Оплатить")],
+        [KeyboardButton(text="Заказать доп услугу")],
         [KeyboardButton(text="Ввести промокод"), KeyboardButton(text="Добавить машину")],
         [KeyboardButton(text="Помощь")],
     ]
@@ -103,7 +108,7 @@ async def broadcast_to_users(text: str) -> int:
 
 
 async def notify_admins_order(order: Order):
-    plates = ", ".join([v.plate_number for v in order.user.vehicles]) or "—"
+    plates = order.vehicle.plate_number if getattr(order, "vehicle", None) else (", ".join([v.plate_number for v in order.user.vehicles]) or "—")
     promo = f"\nПромокод: {order.promo_code} (-{order.discount_percent}%)" if order.promo_code else ""
     text = (
         f"Новая оплата · Заявка #{order.id}\n"
@@ -123,14 +128,15 @@ async def notify_admins_order(order: Order):
             logger.error(f"Ошибка уведомления админа {aid}: {e}")
 
 
-async def notify_user_activated(telegram_id: int | None, slot_number: int, valid_until: datetime | None):
+async def notify_user_activated(telegram_id: int | None, slot_number: int, valid_until: datetime | None, spot_label: str | None = None):
     if not telegram_id:
         return
     until = valid_until.strftime("%d.%m.%Y %H:%M") if valid_until else "—"
+    spot_line = f"\nНазначенное место: {spot_label or slot_number}"
     try:
         await bot.send_message(
             telegram_id,
-            f"Оплата подтверждена!\nВаш номер добавлен в шлагбаум (ячейка #{slot_number}).\nДоступ действует до: {until}",
+            f"Оплата подтверждена!\nВаш номер подключён к доступу на парковку.{spot_line}\nДоступ действует до: {until}",
         )
     except Exception:
         pass
@@ -158,7 +164,7 @@ async def cmd_start(message: Message):
         await message.answer(f"С возвращением, {user.full_name or user.phone}!", reply_markup=kb_main())
     else:
         await message.answer(
-            "Добро пожаловать на парковку!\nОтправьте номер телефона для доступа к шлагбауму.",
+            "Добро пожаловать на парковку!\nОтправьте номер телефона для доступа к парковке.",
             reply_markup=kb_contact(),
         )
 
@@ -193,9 +199,22 @@ async def add_car_start(message: Message, state: FSMContext):
     await message.answer("Введите госномер машины:")
 
 
+MENU_BUTTONS = {
+    "Мой статус", "Выбрать тариф / Оплатить", "Ввести промокод",
+    "Добавить машину", "Помощь", "Открыть личный кабинет"
+}
+
 @dp.message(RegState.waiting_plate)
 async def process_plate(message: Message, state: FSMContext):
-    await state.update_data(plate=message.text.strip())
+    txt = (message.text or "").strip()
+    if txt in MENU_BUTTONS or txt.startswith("/"):
+        await state.set_state(None)
+        await message.answer("Ввод госномера отменён.", reply_markup=kb_main())
+        return
+    if len(txt) < 4 or len(txt) > 15:
+        await message.answer("Введите корректный госномер (например, А123ВС777):")
+        return
+    await state.update_data(plate=txt)
     await state.set_state(RegState.waiting_model)
     await message.answer("Введите марку/модель авто (или «-» чтобы пропустить):")
 
@@ -215,13 +234,28 @@ async def process_model(message: Message, state: FSMContext):
     await state.set_state(None)
     discount = data.get("promo_discount", 0)
     await message.answer("Машина добавлена!", reply_markup=kb_main())
-    await message.answer("Выберите тариф для доступа к шлагбауму:", reply_markup=await kb_tariffs(discount))
+    await message.answer("Выберите тариф для доступа к парковке:", reply_markup=await kb_tariffs(discount))
 
 
 @dp.message(F.text == "Ввести промокод")
 async def promo_start(message: Message, state: FSMContext):
     await state.set_state(RegState.waiting_promo)
-    await message.answer("Введите промокод:")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Пропустить", callback_data="skip_promo")
+    ]])
+    await message.answer("Введите промокод или нажмите «Пропустить»:", reply_markup=kb)
+
+
+@dp.callback_query(F.data == "skip_promo")
+async def on_skip_promo(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(promo_code=None, promo_discount=0, promo_tariff_ids=[])
+    await state.set_state(None)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer("Промокод пропущен. Выберите тариф:", reply_markup=await kb_tariffs(0))
+    await callback.answer()
 
 
 @dp.message(RegState.waiting_promo)
@@ -252,9 +286,44 @@ async def process_promo(message: Message, state: FSMContext):
 
 @dp.message(F.text == "Выбрать тариф / Оплатить")
 async def choose_tariff(message: Message, state: FSMContext):
+    async with async_session() as session:
+        res = await session.execute(
+            select(User).options(selectinload(User.vehicles)).where(User.telegram_id == message.from_user.id)
+        )
+        user = res.scalar_one_or_none()
+    if not user or not user.vehicles:
+        await message.answer("Сначала добавьте автомобиль.", reply_markup=kb_main())
+        return
+    if len(user.vehicles) > 1:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"{v.plate_number}" + (f" (до {v.valid_until.strftime('%d.%m.%Y')})" if v.valid_until else ""),
+                callback_data=f"car_pay:{v.id}"
+            )]
+            for v in user.vehicles
+        ])
+        await message.answer("Выберите автомобиль для оплаты / продления:", reply_markup=kb)
+        return
+    await state.update_data(pay_vehicle_id=user.vehicles[0].id)
     data = await state.get_data()
     discount = data.get("promo_discount", 0)
-    await message.answer("Выберите тариф:", reply_markup=await kb_tariffs(discount, data.get("promo_tariff_ids")))
+    await message.answer(
+        f"Авто: {user.vehicles[0].plate_number}\nВыберите тариф:",
+        reply_markup=await kb_tariffs(discount, data.get("promo_tariff_ids"))
+    )
+
+
+@dp.callback_query(F.data.startswith("car_pay:"))
+async def on_car_pay_pick(callback: CallbackQuery, state: FSMContext):
+    vid = int(callback.data.split(":")[1])
+    await state.update_data(pay_vehicle_id=vid)
+    data = await state.get_data()
+    discount = data.get("promo_discount", 0)
+    await callback.message.edit_text(
+        "Выберите тариф:",
+        reply_markup=await kb_tariffs(discount, data.get("promo_tariff_ids"))
+    )
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("tariff:"))
@@ -269,7 +338,11 @@ async def on_tariff_click(callback: CallbackQuery, state: FSMContext):
         if not user:
             await callback.answer("Сначала зарегистрируйтесь", show_alert=True)
             return
-        order = await create_order(session, user.id, tariff_id, promo_code)
+        try:
+            order = await create_order(session, user.id, tariff_id, promo_code, vehicle_id=data.get("pay_vehicle_id"))
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
         tariff = await session.get(Tariff, tariff_id)
         cfg = await get_app_settings(session)
 
@@ -319,7 +392,7 @@ async def on_admin_confirm(callback: CallbackQuery):
         except ValueError as e:
             await callback.answer(str(e), show_alert=True)
             return
-    await notify_user_activated(user.telegram_id, slot.slot_number, slot.valid_until)
+    await notify_user_activated(user.telegram_id, slot.slot_number, slot.valid_until, slot.spot_label)
     await callback.message.edit_text(callback.message.text + f"\n\nПодтверждено (ячейка #{slot.slot_number})")
     await callback.answer("Подтверждено")
 
@@ -345,6 +418,15 @@ async def on_admin_reject(callback: CallbackQuery):
     await callback.answer("Отклонено")
 
 
+STATUS_LABELS = {
+    "pending_add": "Подключается",
+    "pending": "Ожидает подключения",
+    "active": "Активен",
+    "pending_del": "Отключается",
+    "free": "Не активен",
+}
+
+
 @dp.message(F.text == "Мой статус")
 async def my_status(message: Message):
     async with async_session() as session:
@@ -358,10 +440,13 @@ async def my_status(message: Message):
     if not user:
         await message.answer("Вы не зарегистрированы.", reply_markup=kb_contact())
         return
-    cars = "\n".join([f"• {v.plate_number} ({v.car_model or 'без модели'})" for v in user.vehicles]) or "нет"
+    cars = "\n".join([f"• {v.plate_number}" + (f" ({v.car_model})" if v.car_model else "") + (f" — до {v.valid_until.strftime('%d.%m.%Y %H:%M')}" if v.valid_until else " — не оплачена") for v in user.vehicles]) or "нет"
     if user.slot:
         until = user.slot.valid_until.strftime("%d.%m.%Y %H:%M") if user.slot.valid_until else "—"
-        slot_info = f"Ячейка #{user.slot.slot_number} | Статус: {user.slot.status} | До: {until}\nНомер шлагбаума: {cfg['gate_phone']}"
+        spot_txt = f" | Место: {user.slot.spot_label or user.slot.slot_number}"
+        st_human = STATUS_LABELS.get(user.slot.status, user.slot.status)
+        spot_line = f"Парковочное место: {user.slot.spot_label or user.slot.slot_number}\n" if (user.slot.spot_label or user.slot.slot_number) else ""
+        slot_info = f"{spot_line}Статус: {st_human}\nДействует до: {until}\nНомер для звонка: {cfg['gate_phone']}"
     else:
         slot_info = "Доступ не активирован"
     await message.answer(f"Телефон: +{user.phone}\nМашины:\n{cars}\n\nШлагбаум: {slot_info}")
@@ -500,3 +585,145 @@ async def process_admin_reply(message: Message, state: FSMContext):
         await message.answer("Ответ отправлен пользователю.")
     except Exception as e:
         await message.answer(f"Не удалось отправить ответ: {e}")
+
+
+async def notify_admins_service_order(order: ServiceOrder):
+    comment_line = f"\nКомментарий: {order.comment}" if order.comment else ""
+    text = (
+        f"Оплата доп. услуги · Заказ #{order.id}\n"
+        f"Услуга: {order.service.name}\n"
+        f"Стоимость: {order.amount} ₽\n"
+        f"Место: {order.spot}\n"
+        f"Телефон: +{order.phone}{comment_line}"
+    )
+    for aid in settings.admin_ids:
+        try:
+            await bot.send_message(aid, text)
+        except Exception as e:
+            logger.error(f"Ошибка уведомления админа {aid} о допуслуге: {e}")
+
+
+@dp.message(F.text == "Заказать доп услугу")
+async def extra_service_start(message: Message, state: FSMContext):
+    await state.clear()
+    async with async_session() as session:
+        items = await list_extra_services(session, only_active=True)
+    if not items:
+        await message.answer("Дополнительные услуги сейчас недоступны.", reply_markup=kb_main())
+        return
+    buttons = [
+        [InlineKeyboardButton(text=f"{s.name} — {s.price} ₽", callback_data=f"xsvc:{s.id}")]
+        for s in items
+    ]
+    await message.answer("Выберите дополнительную услугу и стоимость:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+
+@dp.callback_query(F.data.startswith("xsvc:"))
+async def on_extra_service_pick(callback: CallbackQuery, state: FSMContext):
+    svc_id = int(callback.data.split(":")[1])
+    async with async_session() as session:
+        svc = await session.get(ExtraService, svc_id)
+        res = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
+        user = res.scalar_one_or_none()
+    if not svc or not svc.is_active:
+        await callback.answer("Услуга недоступна", show_alert=True)
+        return
+    await state.update_data(xsvc_id=svc.id, xsvc_default_phone=user.phone if user else "")
+    await state.set_state(RegState.waiting_svc_spot)
+    await callback.message.answer(f"Выбрано: {svc.name} ({svc.price} ₽).\nУкажите номер или название места на парковке:")
+    await callback.answer()
+
+
+@dp.message(RegState.waiting_svc_spot)
+async def process_svc_spot(message: Message, state: FSMContext):
+    spot = (message.text or "").strip()
+    if not spot:
+        await message.answer("Пожалуйста, укажите место:")
+        return
+    data = await state.get_data()
+    default_phone = data.get("xsvc_default_phone", "")
+    await state.update_data(xsvc_spot=spot)
+    await state.set_state(RegState.waiting_svc_phone)
+    hint = f" (или напишите «ок», чтобы использовать +{default_phone})" if default_phone else ""
+    await message.answer(f"Введите номер телефона для связи{hint}:")
+
+
+@dp.message(RegState.waiting_svc_phone)
+async def process_svc_phone(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+    data = await state.get_data()
+    phone = data.get("xsvc_default_phone", "") if raw.lower() in ("ок", "ok", "-") else raw
+    if not phone:
+        await message.answer("Введите номер телефона:")
+        return
+    await state.update_data(xsvc_phone=phone)
+    await state.set_state(RegState.waiting_svc_comment)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Пропустить", callback_data="xsvc_skip_comment")
+    ]])
+    await message.answer("Добавьте комментарий к заказу или нажмите «Пропустить»:", reply_markup=kb)
+
+
+async def _finish_service_order(message: Message, state: FSMContext, comment: str):
+    data = await state.get_data()
+    await state.clear()
+    async with async_session() as session:
+        try:
+            order = await create_service_order(
+                session,
+                service_id=data["xsvc_id"],
+                phone=data["xsvc_phone"],
+                spot=data["xsvc_spot"],
+                comment=comment,
+            )
+        except ValueError as e:
+            await message.answer(f"Ошибка: {e}", reply_markup=kb_main())
+            return
+        cfg = await get_app_settings(session)
+    comment_line = f"\nКомментарий: {order.comment}" if order.comment else ""
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Оплатить", callback_data=f"xsvc_pay:{order.id}")
+    ]])
+    await message.answer(
+        f"Заказ доп. услуги #{order.id}\n"
+        f"Услуга: {order.service.name}\n"
+        f"Место: {order.spot}\n"
+        f"Телефон: +{order.phone}{comment_line}\n"
+        f"К оплате: {order.amount} ₽\n\n"
+        f"Реквизиты СБП:\n"
+        f"Номер: {cfg['sbp_phone']}\n"
+        f"Банк: {cfg['sbp_bank']}\n"
+        f"Получатель: {cfg['sbp_recipient']}",
+        reply_markup=kb,
+    )
+
+
+@dp.callback_query(F.data == "xsvc_skip_comment")
+async def on_xsvc_skip_comment(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await _finish_service_order(callback.message, state, "")
+    await callback.answer()
+
+
+@dp.message(RegState.waiting_svc_comment)
+async def process_svc_comment(message: Message, state: FSMContext):
+    raw_comment = (message.text or "").strip()
+    comment = "" if raw_comment == "-" else raw_comment
+    await _finish_service_order(message, state, comment)
+
+@dp.callback_query(F.data.startswith("xsvc_pay:"))
+async def on_xsvc_pay_click(callback: CallbackQuery):
+    order_id = int(callback.data.split(":")[1])
+    async with async_session() as session:
+        try:
+            order = await mark_service_order_paid(session, order_id)
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
+    await notify_admins_service_order(order)
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(f"Оплата по заказу #{order_id} зафиксирована. Уведомление отправлено администратору!")
+    await callback.answer()
