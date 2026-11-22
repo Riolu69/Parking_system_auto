@@ -2563,6 +2563,131 @@
   })();
   </script>
 
+
+  <script>
+  (function() {
+    // 1. Рабочая функция назначения места
+    window.xsvcSetSpot = async function(userId, currentSpot) {
+      const val = prompt("Введите номер парковочного места (оставьте пустым чтобы очистить):", currentSpot || "");
+      if (val === null) return;
+      const r = await fetch("/api/admin/users/" + userId + "/spot", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+        body: JSON.stringify({ spot: val.trim() })
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.detail || "Ошибка сохранения места");
+        return;
+      }
+      if (typeof loadAdmin === "function") loadAdmin();
+    };
+
+    // 2. Убираем дублирующие кнопки "Место" и старые подписи "Место: N" из #users-body
+    function cleanDuplicateSpotButtons() {
+      const tbody = document.getElementById("users-body");
+      if (!tbody) return;
+      tbody.querySelectorAll("tr").forEach(tr => {
+        // Удаляем любые кнопки "Место" вне .adm-actions (это старый инъектор)
+        tr.querySelectorAll("button").forEach(btn => {
+          if (/^место$/i.test((btn.textContent || "").trim()) && !btn.classList.contains("adm-btn-spot")) {
+            btn.remove();
+          }
+        });
+        // Удаляем дублирующую текстовую строку "Место: N" если уже есть .adm-spot-tag
+        if (tr.querySelector(".adm-spot-tag")) {
+          tr.querySelectorAll("div, span").forEach(el => {
+            if (!el.classList.contains("adm-spot-tag") && /^место:\s*/i.test((el.textContent || "").trim())) {
+              el.remove();
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Карточка управления доп. услугами в админке
+    function ensureExtraServicesCard() {
+      if (document.getElementById("adm-xsvc-card")) return;
+      const usersBody = document.getElementById("users-body");
+      if (!usersBody) return;
+      const usersCard = usersBody.closest(".card");
+      if (!usersCard || !usersCard.parentNode) return;
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.id = "adm-xsvc-card";
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+          <h2 style="margin:0;">Дополнительные услуги</h2>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <input id="adm-xsvc-name" placeholder="Название (напр. Мойка кузова)" style="flex:2;min-width:180px;">
+          <input id="adm-xsvc-price" type="number" placeholder="Цена ₽" style="flex:1;min-width:100px;">
+          <button class="adm-btn adm-btn-ok" style="height:38px;padding:0 16px;" onclick="admAddExtraService()">Добавить</button>
+        </div>
+        <div id="adm-xsvc-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      `;
+      usersCard.parentNode.insertBefore(card, usersCard.nextSibling);
+      admLoadExtraServices();
+    }
+
+    window.admLoadExtraServices = async function() {
+      const box = document.getElementById("adm-xsvc-list");
+      if (!box) return;
+      const pass = typeof getAdminPass === "function" ? getAdminPass() : "";
+      if (!pass) return;
+      const r = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!r.ok) return;
+      const items = await r.json();
+      if (!items.length) {
+        box.innerHTML = '<div class="adm-meta">Услуг пока нет. Добавьте первую выше.</div>';
+        return;
+      }
+      box.innerHTML = items.map(x => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);">
+          <div><b>${x.name}</b> <span style="color:#7dd3fc;margin-left:8px;">${x.price} ₽</span></div>
+          <button class="adm-btn adm-btn-del" title="Удалить" onclick="admDelExtraService(${x.id})">×</button>
+        </div>
+      `).join("");
+    };
+
+    window.admAddExtraService = async function() {
+      const nameEl = document.getElementById("adm-xsvc-name");
+      const priceEl = document.getElementById("adm-xsvc-price");
+      const name = (nameEl.value || "").trim();
+      const price = parseInt(priceEl.value || "0", 10);
+      if (!name) return alert("Введите название услуги");
+      const r = await fetch("/api/admin/extra-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": getAdminPass() },
+        body: JSON.stringify({ name, price: isNaN(price) ? 0 : price })
+      });
+      if (!r.ok) return alert("Ошибка добавления услуги");
+      nameEl.value = "";
+      priceEl.value = "";
+      admLoadExtraServices();
+    };
+
+    window.admDelExtraService = async function(id) {
+      if (!confirm("Удалить услугу?")) return;
+      await fetch("/api/admin/extra-services/" + id, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": getAdminPass() }
+      });
+      admLoadExtraServices();
+    };
+
+    setInterval(() => {
+      cleanDuplicateSpotButtons();
+      ensureExtraServicesCard();
+    }, 600);
+    window.addEventListener("load", () => {
+      cleanDuplicateSpotButtons();
+      ensureExtraServicesCard();
+    });
+  })();
+  </script>
+
 </body>
 </html>
 
