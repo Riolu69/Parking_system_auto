@@ -471,6 +471,127 @@
       box-sizing: border-box;
     }
 
+
+    /* xsvc-scroll-5-rows: не более 5 строк в заявках на оплату и очереди SMS со скроллом */
+    .xsvc-capped-scroll {
+      max-height: 290px;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
+
+    /* Убираем лишний общий скролл у карточек и обёрток */
+    .bento, .bento-grid, .grid, .cards, .card, .panel, .wrap, .container, main, section {
+      overflow-y: visible !important;
+      max-height: none !important;
+    }
+    .xsvc-capped-scroll, .xsvc-capped-scroll * {
+      max-height: revert !important;
+    }
+    .xsvc-capped-scroll {
+      max-height: 290px !important;
+      overflow-y: auto !important;
+    }
+
+  
+    /* Внутренний скролл только для таблиц заявок на оплату и клиентов/ячеек */
+    .xsvc-table-scroll {
+      max-height: 320px !important;
+      overflow-y: auto !important;
+      overflow-x: auto !important;
+    }
+    .xsvc-table-scroll table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .xsvc-table-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--card, #1c1c1e);
+    }
+
+  
+    /* === ADMIN TABLES REDESIGN === */
+    .xsvc-table-scroll {
+      max-height: 330px !important;
+      overflow-y: auto !important;
+      overflow-x: auto !important;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.18) transparent;
+    }
+    .xsvc-table-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .xsvc-table-scroll::-webkit-scrollbar-track { background: transparent; }
+    .xsvc-table-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 99px; }
+    .xsvc-table-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
+
+    .xsvc-table-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #16171a !important;
+      padding-top: 10px !important;
+      padding-bottom: 10px !important;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .adm-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .adm-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: #e5e7eb;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .adm-btn:hover { background: rgba(255,255,255,.12); }
+    .adm-btn-ok {
+      background: rgba(34,197,94,.16);
+      border-color: rgba(34,197,94,.35);
+      color: #4ade80;
+    }
+    .adm-btn-ok:hover { background: rgba(34,197,94,.26); }
+    .adm-btn-spot {
+      background: rgba(56,189,248,.12);
+      border-color: rgba(56,189,248,.32);
+      color: #7dd3fc;
+    }
+    .adm-btn-spot:hover { background: rgba(56,189,248,.22); }
+    .adm-btn-del {
+      margin-left: 6px;
+      width: 28px;
+      padding: 0;
+      background: rgba(239,68,68,.12);
+      border-color: rgba(239,68,68,.3);
+      color: #f87171;
+    }
+    .adm-btn-del:hover { background: rgba(239,68,68,.24); }
+    .adm-spot-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56,189,248,.12);
+      color: #7dd3fc;
+      border: 1px solid rgba(56,189,248,.25);
+    }
+    .adm-meta {
+      color: var(--muted, #9ca3af);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
   </style>
 </head>
 <body>
@@ -544,6 +665,268 @@
           <div id="chk-result"></div>
           <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
             <button class="btn btn-secondary" style="width:100%;" onclick="openHelpModal()">Помощь / Написать администратору</button>
+          
+      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
+        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
+        <div style="display:grid;gap:10px;">
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
+            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
+            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
+            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
+            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
+            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
+          <div id="xsvc-status-msg" style="font-size:12px;"></div>
+          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
+        </div>
+      </div>
+
+      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
+        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
+        <div style="display:grid;gap:8px;margin-bottom:10px;">
+          <input type="hidden" id="xsvc-edit-id">
+          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          <div style="display:flex;gap:8px;">
+            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
+              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
+            </div>
+          </div>
+        </div>
+        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
+      </div>
+
+  <script>
+  (function() {
+    let xsvcCatalog = [];
+
+        
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } else {
+        panel.style.display = "none";
+        if (btn) btn.textContent = "Заказать доп услугу";
+      }
+    };
+
+    async function xsvcLoadPublic() {
+      const res = await fetch("/api/extra-services");
+      if (!res.ok) return;
+      xsvcCatalog = await res.json();
+      const sel = document.getElementById("xsvc-select");
+      if (!sel) return;
+      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
+      xsvcRenderPrice();
+    }
+
+    window.xsvcRenderPrice = function() {
+      const sel = document.getElementById("xsvc-select");
+      const hint = document.getElementById("xsvc-price-hint");
+      if (!sel || !hint) return;
+      const item = xsvcCatalog.find(x => x.id === Number(sel.value));
+      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
+    };
+
+    window.xsvcSubmitOrder = async function() {
+      const msg = document.getElementById("xsvc-status-msg");
+      const payBox = document.getElementById("xsvc-pay-box");
+      msg.textContent = "";
+      const payload = {
+        service_id: Number(document.getElementById("xsvc-select").value),
+        spot: document.getElementById("xsvc-spot").value.trim(),
+        phone: document.getElementById("xsvc-phone").value.trim(),
+        comment: document.getElementById("xsvc-comment").value.trim(),
+      };
+      const res = await fetch("/api/extra-services/order", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.textContent = data.detail || "Ошибка оформления";
+        return;
+      }
+      const p = data.payment || {};
+      payBox.style.display = "block";
+      payBox.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
+        <div style="font-size:12px;line-height:1.45;">
+          Место: <b>${data.spot}</b><br>
+          Телефон: <b>${data.phone}</b><br>
+          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
+          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
+        </div>
+        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
+      `;
+    };
+
+    window.xsvcConfirmPaid = async function(orderId) {
+      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
+      const payBox = document.getElementById("xsvc-pay-box");
+      if (res.ok) {
+        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
+      } else {
+        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
+      }
+    };
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    window.xsvcLoadAdmin = async function() {
+      const pass = getAdminPass();
+      const box = document.getElementById("xsvc-admin-box");
+      if (!box) return;
+      if (!pass) { box.style.display = "none"; return; }
+      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!res.ok) { box.style.display = "none"; return; }
+      box.style.display = "block";
+      const rows = await res.json();
+      const list = document.getElementById("xsvc-adm-list");
+      list.innerHTML = rows.map(r => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
+          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
+            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
+          </div>
+        </div>
+      `).join("");
+      window._xsvcAdminRows = rows;
+    };
+
+    window.xsvcEditItem = function(id) {
+      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
+      if (!r) return;
+      document.getElementById("xsvc-edit-id").value = r.id;
+      document.getElementById("xsvc-adm-name").value = r.name;
+      document.getElementById("xsvc-adm-price").value = r.price;
+      document.getElementById("xsvc-adm-desc").value = r.description || "";
+      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
+    };
+
+    window.xsvcResetAdminForm = function() {
+      document.getElementById("xsvc-edit-id").value = "";
+      document.getElementById("xsvc-adm-name").value = "";
+      document.getElementById("xsvc-adm-price").value = "";
+      document.getElementById("xsvc-adm-desc").value = "";
+      document.getElementById("xsvc-adm-active").checked = true;
+    };
+
+    window.xsvcSaveAdmin = async function() {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const id = document.getElementById("xsvc-edit-id").value;
+      const payload = {
+        name: document.getElementById("xsvc-adm-name").value.trim(),
+        price: Number(document.getElementById("xsvc-adm-price").value || 0),
+        description: document.getElementById("xsvc-adm-desc").value.trim(),
+        is_active: document.getElementById("xsvc-adm-active").checked,
+      };
+      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
+      const method = id ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        xsvcResetAdminForm();
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    window.xsvcDeleteItem = async function(id) {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const res = await fetch(`/api/admin/extra-services/${id}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": pass },
+      });
+      if (res.ok) {
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    xsvcLoadPublic();
+    setInterval(xsvcLoadAdmin, 2500);
+  })();
+  </script>
+
+      <button type="button" id="xsvc-open-btn" onclick="xsvcOpenForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;">Заказать доп услугу</button><button type="button" id="xsvc-bottom-close-btn" onclick="xsvcCloseForm()" class="btn btn-secondary" style="width:100%;margin-top:8px;display:none;">Скрыть</button>
+
+      <div id="xsvc-order-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(128,128,140,.22);">
+        <div style="font-weight:600;margin-bottom:8px;">Заказ дополнительной услуги</div>
+        <div style="display:grid;gap:10px;">
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Услуга и стоимость</label>
+            <select id="xsvc-select" onchange="xsvcRenderPrice()" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;"></select>
+            <div id="xsvc-price-hint" style="margin-top:4px;font-size:12px;font-weight:600;"></div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Место</label>
+            <input id="xsvc-spot" type="text" placeholder="Например, место 14" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Номер телефона</label>
+            <input id="xsvc-phone" type="tel" placeholder="+7 (999) 123-45-67" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;opacity:.8;margin-bottom:4px;">Комментарий</label>
+            <input id="xsvc-comment" type="text" placeholder="Комментарий к заказу" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          </div>
+          <button type="button" onclick="xsvcSubmitOrder()" class="btn primary" style="width:100%;">Оплатить</button>
+          <div id="xsvc-status-msg" style="font-size:12px;"></div>
+          <div id="xsvc-pay-box" style="display:none;padding:12px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
+        </div>
+      </div>
+
+      <div id="xsvc-admin-box" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid rgba(128,128,140,.25);">
+        <div style="font-weight:600;margin-bottom:8px;">Редактирование доп. услуг</div>
+        <div style="display:grid;gap:8px;margin-bottom:10px;">
+          <input type="hidden" id="xsvc-edit-id">
+          <input id="xsvc-adm-name" type="text" placeholder="Название услуги" style="width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;box-sizing:border-box;">
+          <div style="display:flex;gap:8px;">
+            <input id="xsvc-adm-price" type="number" min="0" placeholder="Цена, ₽" style="width:110px;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+            <input id="xsvc-adm-desc" type="text" placeholder="Описание" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input id="xsvc-adm-active" type="checkbox" checked> Активна</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="xsvcSaveAdmin()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;">Сохранить</button>
+              <button type="button" onclick="xsvcResetAdminForm()" style="padding:7px 10px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:transparent;color:inherit;cursor:pointer;">Сброс</button>
+            </div>
+          </div>
+        </div>
+        <div id="xsvc-adm-list" style="display:grid;gap:6px;"></div>
+      </div>
+
+  
           </div>
         </div>
       </div>
@@ -952,44 +1335,87 @@
       }
     }
 
-    async function checkStatus() {
+            async function checkStatus() {
       const box = document.getElementById('chk-result');
       const phone = document.getElementById('chk-phone').value.trim();
       if (!phone) return;
       const r = await fetch('/api/status/' + encodeURIComponent(phone));
       if (!r.ok) { box.innerHTML = '<div class="msg err">Номер не найден в базе.</div>'; return; }
       const d = await r.json();
-      const cars = d.vehicles.map(v => `${v.plate}${v.model ? ' · ' + v.model : ''}`).join('<br>') || 'нет';
+      const stHumanMap = {
+        pending_add: 'Подключается',
+        pending: 'Ожидает подключения',
+        active: 'Активен',
+        pending_del: 'Отключается',
+        free: 'Не активен'
+      };
+      const cars = (d.vehicles || []).map(v => `${v.plate}${v.model ? ' · ' + v.model : ''}`).join('<br>') || '—';
       const gateBtns = (d.slot && d.slot.status === 'active' && d.gate_phone)
         ? `<div class="pay-actions" style="margin-top:10px;">
-             <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на шлагбаум</a>
+             <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на парковку</a>
              <a class="btn btn-sm btn-secondary" href="/api/gate-contact.vcf">Сохранить контакт</a>
            </div>`
         : '';
-      const slot = d.slot
-        ? `Ячейка #${d.slot.number} <span class="pill st-${d.slot.status}">${d.slot.status}</span><br><span style="color:var(--muted)">Действует до: ${d.slot.valid_until || '—'}</span>${gateBtns}`
-        : '<span style="color:var(--muted)">Доступ ещё не активирован</span>';
-      box.innerHTML = `<div class="status-box"><div style="font-weight:600; margin-bottom:6px;">+${d.phone}</div><div style="margin-bottom:8px;">${cars}</div><div>${slot}</div></div>`;
+      let slotHtml = '<div style="color:var(--muted)">Доступ не оформлен</div>';
+      if (d.slot) {
+        const stLabel = stHumanMap[d.slot.status] || d.slot.status;
+        const spotVal = d.slot.spot || d.slot.number || '';
+        slotHtml = `
+          ${spotVal ? `<div style="margin-bottom:4px;">Парковочное место: ${spotVal}</div>` : ''}
+          <div style="margin-bottom:4px;">Статус: ${stLabel}</div>
+          <div style="color:var(--muted)">Действует до: ${d.slot.valid_until || '—'}</div>
+          ${gateBtns}
+        `;
+      }
+      box.innerHTML = `
+        <div class="status-box" style="font-size:13px;line-height:1.5;">
+          <div style="font-weight:600;margin-bottom:6px;">+${d.phone}</div>
+          <div style="margin-bottom:8px;">${cars}</div>
+          <div>${slotHtml}</div>
+        </div>
+      `;
     }
 
     function getAdminPass() { return document.getElementById('adm-pass').value || localStorage.getItem('adm_pass') || ''; }
 
-    function renderUsers() {
+        function renderUsers() {
       const q = (document.getElementById('user-search').value || '').trim().toLowerCase();
       const filtered = allUsers.filter(u =>
-        u.phone.includes(q) || u.vehicles.some(v => v.plate.toLowerCase().includes(q))
+        u.phone.includes(q) || (u.vehicles || []).some(v => (v.plate || '').toLowerCase().includes(q))
       );
+      const stMap = {
+        active: 'Активен',
+        pending_add: 'Подключается',
+        pending: 'Подключается',
+        pending_del: 'Отключается',
+        free: 'Не активен'
+      };
       document.getElementById('users-body').innerHTML = filtered.map(u => {
-        const cars = u.vehicles.map(v => v.plate).join(', ') || '—';
-        const slot = u.slot
-          ? `#${u.slot.number} <span class="pill st-${u.slot.status}">${u.slot.status}</span><br><span style="color:var(--muted);font-size:12px;">до ${u.slot.valid_until || '—'}</span>`
-          : '—';
+        const cars = (u.vehicles || []).map(v => v.plate).filter(Boolean).join(', ') || '—';
+        let slotHtml = '<span class="adm-meta">Нет доступа</span>';
+        if (u.slot) {
+          const stLabel = stMap[u.slot.status] || u.slot.status;
+          const spotTag = u.slot.spot ? `<span class="adm-spot-tag">Место ${u.slot.spot}</span>` : '';
+          slotHtml = `
+            <div><span class="pill st-${u.slot.status}">${stLabel}</span>${spotTag}</div>
+            <div class="adm-meta">#${u.slot.number} · до ${u.slot.valid_until || '—'}</div>
+          `;
+        }
+        const spotBtn = u.slot
+          ? `<button class="adm-btn adm-btn-spot" onclick="if(window.xsvcSetSpot) xsvcSetSpot(${u.id}, '${u.slot.spot || ''}')">Место</button>`
+          : '';
         return `<tr>
-          <td>${u.id}</td><td><b>+${u.phone}</b></td><td>${cars}</td><td>${slot}</td>
+          <td>${u.id}</td>
+          <td><b>+${u.phone}</b></td>
+          <td style="max-width:260px;word-break:break-word;">${cars}</td>
+          <td>${slotHtml}</td>
           <td style="white-space:nowrap;">
-            <button class="btn btn-sm btn-acc" onclick="adminGrant(${u.id}, 1)">+1д</button>
-            <button class="btn btn-sm btn-ok" onclick="adminGrant(${u.id}, 30)">+30д</button>
-            ${u.slot ? `<button class="btn btn-sm btn-del" onclick="adminRevoke(${u.id})">×</button>` : ''}
+            <div class="adm-actions">
+              <button class="adm-btn" onclick="adminGrant(${u.id}, 1)">+1д</button>
+              <button class="adm-btn adm-btn-ok" onclick="adminGrant(${u.id}, 30)">+30д</button>
+              ${spotBtn}
+              <button class="adm-btn adm-btn-del" title="Отключить доступ" onclick="adminRevoke(${u.id})">×</button>
+            </div>
           </td>
         </tr>`;
       }).join('');
@@ -1603,6 +2029,540 @@
 
     loadTariffs();
   </script>
+
+<script>
+  (function() {
+    let xsvcCatalog = [];
+
+    
+    };
+
+    async function xsvcLoadPublic() {
+      const res = await fetch("/api/extra-services");
+      if (!res.ok) return;
+      xsvcCatalog = await res.json();
+      const sel = document.getElementById("xsvc-select");
+      if (!sel) return;
+      sel.innerHTML = xsvcCatalog.map(s => `<option value="${s.id}">${s.name} — ${s.price} ₽</option>`).join("");
+      xsvcRenderPrice();
+    }
+
+    window.xsvcRenderPrice = function() {
+      const sel = document.getElementById("xsvc-select");
+      const hint = document.getElementById("xsvc-price-hint");
+      if (!sel || !hint) return;
+      const item = xsvcCatalog.find(x => x.id === Number(sel.value));
+      hint.textContent = item ? `К оплате: ${item.price} ₽` : "";
+    };
+
+    window.xsvcSubmitOrder = async function() {
+      const msg = document.getElementById("xsvc-status-msg");
+      const payBox = document.getElementById("xsvc-pay-box");
+      msg.textContent = "";
+      const payload = {
+        service_id: Number(document.getElementById("xsvc-select").value),
+        spot: document.getElementById("xsvc-spot").value.trim(),
+        phone: document.getElementById("xsvc-phone").value.trim(),
+        comment: document.getElementById("xsvc-comment").value.trim(),
+      };
+      const res = await fetch("/api/extra-services/order", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.textContent = data.detail || "Ошибка оформления";
+        return;
+      }
+      const p = data.payment || {};
+      payBox.style.display = "block";
+      payBox.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px;">Заказ #${data.order_id} · ${data.service_name} — ${data.amount} ₽</div>
+        <div style="font-size:12px;line-height:1.45;">
+          Место: <b>${data.spot}</b><br>
+          Телефон: <b>${data.phone}</b><br>
+          ${data.comment ? `Комментарий: <b>${data.comment}</b><br>` : ""}
+          СБП: <b>${p.sbp_phone || ""}</b> (${p.sbp_bank || ""}, ${p.sbp_recipient || ""})
+        </div>
+        <button type="button" onclick="xsvcConfirmPaid(${data.order_id})" style="margin-top:8px;padding:8px 14px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;width:100%;">Подтвердить оплату</button>
+      `;
+    };
+
+    window.xsvcConfirmPaid = async function(orderId) {
+      const res = await fetch(`/api/extra-services/orders/${orderId}/paid`, { method: "POST" });
+      const payBox = document.getElementById("xsvc-pay-box");
+      if (res.ok) {
+        payBox.innerHTML = `<div style="font-weight:600;font-size:12px;">Оплата по заказу #${orderId} подтверждена! Уведомление отправлено администратору.</div>`;
+      } else {
+        payBox.innerHTML = `<div style="font-size:12px;">Не удалось отправить уведомление об оплате.</div>`;
+      }
+    };
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    window.xsvcLoadAdmin = async function() {
+      const pass = getAdminPass();
+      const box = document.getElementById("xsvc-admin-box");
+      if (!box) return;
+      if (!pass) { box.style.display = "none"; return; }
+      const res = await fetch("/api/admin/extra-services", { headers: { "X-Admin-Password": pass } });
+      if (!res.ok) { box.style.display = "none"; return; }
+      box.style.display = "block";
+      const rows = await res.json();
+      const list = document.getElementById("xsvc-adm-list");
+      list.innerHTML = rows.map(r => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;">
+          <div><b>${r.name}</b> — ${r.price} ₽ <span style="opacity:.65;">(${r.is_active ? "акт." : "скр."})</span></div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="xsvcEditItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:transparent;color:inherit;cursor:pointer;">Изм.</button>
+            <button type="button" onclick="xsvcDeleteItem(${r.id})" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,69,58,.45);background:transparent;color:#ff453a;cursor:pointer;">Уд.</button>
+          </div>
+        </div>
+      `).join("");
+      window._xsvcAdminRows = rows;
+    };
+
+    window.xsvcEditItem = function(id) {
+      const r = (window._xsvcAdminRows || []).find(x => x.id === id);
+      if (!r) return;
+      document.getElementById("xsvc-edit-id").value = r.id;
+      document.getElementById("xsvc-adm-name").value = r.name;
+      document.getElementById("xsvc-adm-price").value = r.price;
+      document.getElementById("xsvc-adm-desc").value = r.description || "";
+      document.getElementById("xsvc-adm-active").checked = !!r.is_active;
+    };
+
+    window.xsvcResetAdminForm = function() {
+      document.getElementById("xsvc-edit-id").value = "";
+      document.getElementById("xsvc-adm-name").value = "";
+      document.getElementById("xsvc-adm-price").value = "";
+      document.getElementById("xsvc-adm-desc").value = "";
+      document.getElementById("xsvc-adm-active").checked = true;
+    };
+
+    window.xsvcSaveAdmin = async function() {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const id = document.getElementById("xsvc-edit-id").value;
+      const payload = {
+        name: document.getElementById("xsvc-adm-name").value.trim(),
+        price: Number(document.getElementById("xsvc-adm-price").value || 0),
+        description: document.getElementById("xsvc-adm-desc").value.trim(),
+        is_active: document.getElementById("xsvc-adm-active").checked,
+      };
+      const url = id ? `/api/admin/extra-services/${id}` : "/api/admin/extra-services";
+      const method = id ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "X-Admin-Password": pass },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        xsvcResetAdminForm();
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    window.xsvcDeleteItem = async function(id) {
+      const pass = getAdminPass();
+      if (!pass) return;
+      const res = await fetch(`/api/admin/extra-services/${id}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Password": pass },
+      });
+      if (res.ok) {
+        await xsvcLoadAdmin();
+        await xsvcLoadPublic();
+      }
+    };
+
+    xsvcLoadPublic();
+    setInterval(xsvcLoadAdmin, 2500);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    const statusBox = document.getElementById("statusResult") || document.getElementById("status-result") || document.querySelector("[data-status-result]");
+    const origFetch = window.fetch.bind(window);
+
+    window.fetch = async function(input, init) {
+      const resp = await origFetch(input, init);
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (url.includes("/api/status/") && resp.ok) {
+        try {
+          const clone = resp.clone();
+          const data = await clone.json();
+          const spot = data && data.slot && data.slot.spot;
+          if (spot) {
+            setTimeout(() => {
+              const host = statusBox || document.body;
+              if (!document.getElementById("assigned-spot-badge") && host) {
+                const badge = document.createElement("div");
+                badge.id = "assigned-spot-badge";
+                badge.style.cssText = "margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(10,132,255,.14);border:1px solid rgba(10,132,255,.35);font-size:13px;font-weight:600;";
+                badge.textContent = "Назначенное место: " + spot;
+                const targets = Array.from(document.querySelectorAll("div, p, span")).filter(el => el.children.length === 0 && /ячейк|статус|доступ/i.test(el.textContent || ""));
+                if (targets.length) {
+                  targets[targets.length - 1].insertAdjacentElement("afterend", badge);
+                }
+              } else if (document.getElementById("assigned-spot-badge")) {
+                document.getElementById("assigned-spot-badge").textContent = "Назначенное место: " + spot;
+              }
+            }, 60);
+          }
+        } catch (e) {}
+      }
+      return resp;
+    };
+
+    window.xsvcSetUserSpot = async function() {
+      const uid = Number(document.getElementById("xsvc-spot-uid").value);
+      const spot = document.getElementById("xsvc-spot-val").value.trim();
+      const msg = document.getElementById("xsvc-spot-msg");
+      let pass = "";
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) { pass = localStorage.getItem(k); break; }
+      }
+      if (!pass) {
+        for (const k of Object.keys(sessionStorage)) {
+          if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) { pass = sessionStorage.getItem(k); break; }
+        }
+      }
+      const res = await fetch("/api/admin/set-spot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
+        body: JSON.stringify({user_id: uid, spot})
+      });
+      const out = await res.json().catch(() => ({}));
+      msg.textContent = res.ok ? `Назначено место: ${out.spot} (ячейка #${out.slot_number})` : (out.detail || "Ошибка");
+    };
+
+    const admBox = document.getElementById("xsvc-admin-box");
+    if (admBox && !document.getElementById("xsvc-spot-changer")) {
+      const div = document.createElement("div");
+      div.id = "xsvc-spot-changer";
+      div.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid rgba(128,128,140,.25);";
+      div.innerHTML = `
+        <div style="font-weight:600;margin-bottom:6px;font-size:12px;">Назначение / смена места пользователю</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <input id="xsvc-spot-uid" type="number" placeholder="ID клиента" style="width:95px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
+          <input id="xsvc-spot-val" type="text" placeholder="Место (например, 12)" style="flex:1;min-width:120px;padding:7px 9px;border-radius:10px;border:1px solid rgba(128,128,140,.3);background:rgba(255,255,255,.06);color:inherit;font-size:12px;">
+          <button type="button" onclick="xsvcSetUserSpot()" style="padding:7px 12px;border-radius:10px;border:0;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;font-size:12px;">Сменить место</button>
+        </div>
+        <div id="xsvc-spot-msg" style="margin-top:6px;font-size:12px;"></div>
+      `;
+      admBox.appendChild(div);
+    }
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function applyFiveRowScroll() {
+      const headings = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span, label"))
+        .filter(el => el.children.length === 0 && /^(заявки на оплату|очередь sms)$/i.test((el.textContent || "").trim()));
+
+      for (const h of headings) {
+        let parent = h.parentElement;
+        let container = null;
+        for (let depth = 0; depth < 3 && parent; depth++, parent = parent.parentElement) {
+          const table = parent.querySelector("table tbody") || parent.querySelector("table");
+          if (table) {
+            const rows = Array.from(table.querySelectorAll("tr")).filter(tr => !tr.querySelector("th"));
+            if (rows.length > 5 && rows[4]) {
+              const rowRect = rows[4].getBoundingClientRect();
+              const tblRect = table.getBoundingClientRect();
+              const capH = Math.max(220, Math.round(rowRect.bottom - tblRect.top + 8));
+              container = table.parentElement;
+              if (container && !container.classList.contains("card")) {
+                container.style.maxHeight = capH + "px";
+                container.style.overflowY = "auto";
+                container.classList.add("xsvc-capped-scroll");
+              }
+              break;
+            }
+          }
+        }
+          }
+          const listBox = Array.from(parent.children).find(ch => ch !== h && ch.children && ch.children.length > 5);
+          if (listBox) {
+            const items = Array.from(listBox.children);
+            const firstTop = items[0].getBoundingClientRect().top;
+            const fifthBottom = items[4].getBoundingClientRect().bottom;
+            const capH = Math.max(220, Math.round(fifthBottom - firstTop + 8));
+            listBox.style.maxHeight = capH + "px";
+            listBox.style.overflowY = "auto";
+            listBox.classList.add("xsvc-capped-scroll");
+            break;
+          }
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => applyFiveRowScroll());
+    obs.observe(document.body, { childList: true, subtree: true });
+    setInterval(applyFiveRowScroll, 1500);
+    window.addEventListener("load", applyFiveRowScroll);
+  })();
+  </script>
+
+
+  <script>
+  /* xsvc-render-spots-everywhere */
+  (function() {
+    const origFetch = window.fetch.bind(window);
+    let lastStatusData = null;
+    let lastUsersData = null;
+
+    function getAdminPass() {
+      for (const k of Object.keys(localStorage)) {
+        if (k.toLowerCase().includes("admin") && localStorage.getItem(k)) return localStorage.getItem(k);
+      }
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.toLowerCase().includes("admin") && sessionStorage.getItem(k)) return sessionStorage.getItem(k);
+      }
+      return "";
+    }
+
+    function renderUsersTableSpots() {
+      if (!Array.isArray(lastUsersData) || !lastUsersData.length) return;
+      const byId = new Map(lastUsersData.map(u => [String(u.id), u]));
+      const byPhone = new Map(lastUsersData.map(u => [String(u.phone).replace(/\D/g, ""), u]));
+
+      document.querySelectorAll("table tbody tr").forEach(tr => {
+        const cells = Array.from(tr.children);
+        if (cells.length < 4) return;
+        const idText = (cells[0].textContent || "").trim();
+        const phoneDigits = (cells[1].textContent || "").replace(/\D/g, "");
+        const u = byId.get(idText) || byPhone.get(phoneDigits);
+        if (!u || !u.slot) return;
+        const spot = u.slot.spot || u.slot.number || "";
+        const cellSlot = cells[3];
+        if (!cellSlot.querySelector(".xsvc-spot-tag")) {
+          const tag = document.createElement("div");
+          tag.className = "xsvc-spot-tag";
+          tag.style.cssText = "margin-top:4px;font-size:12px;font-weight:600;color:#38bdf8;";
+          tag.textContent = "Место: " + spot;
+          cellSlot.appendChild(tag);
+        } else {
+          cellSlot.querySelector(".xsvc-spot-tag").textContent = "Место: " + spot;
+        }
+        const actCell = cells[cells.length - 1];
+        if (actCell && !actCell.querySelector(".xsvc-edit-spot-btn")) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "xsvc-edit-spot-btn";
+          btn.textContent = "Место";
+          btn.style.cssText = "margin-left:6px;padding:4px 8px;border-radius:8px;border:1px solid rgba(128,128,140,.35);background:rgba(10,132,255,.15);color:inherit;font-size:11px;cursor:pointer;";
+          btn.onclick = async () => {
+            const nextSpot = prompt("Введите новое место для +" + u.phone + ":", spot);
+            if (!nextSpot || !nextSpot.trim()) return;
+            const pass = getAdminPass();
+            const r = await fetch("/api/admin/set-spot", {
+              method: "POST",
+              headers: {"Content-Type": "application/json", "X-Admin-Password": pass},
+              body: JSON.stringify({user_id: u.id, spot: nextSpot.trim()})
+            });
+            if (r.ok) {
+              u.slot.spot = nextSpot.trim();
+              renderUsersTableSpots();
+            }
+          };
+          actCell.appendChild(btn);
+        }
+      });
+    }
+
+    window.fetch = async function(input, init) {
+      const resp = await origFetch(input, init);
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (url.includes("/api/status/") && resp.ok) {
+        try {
+          lastStatusData = await resp.clone().json();
+          setTimeout(renderStatusSpot, 50);
+        } catch (e) {}
+      }
+      if (url.includes("/api/admin/users") && resp.ok) {
+        try {
+          lastUsersData = await resp.clone().json();
+          setTimeout(renderUsersTableSpots, 80);
+        } catch (e) {}
+      }
+      return resp;
+    };
+
+    setInterval(() => {
+      const oldBadge = document.getElementById("xsvc-status-spot-line"); if (oldBadge) oldBadge.remove();
+      renderUsersTableSpots();
+    }, 1200);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    const HUMAN_STATUS = {
+      "pending_add": "Подключается",
+      "pending": "Ожидает подключения",
+      "active": "Активен",
+      "pending_del": "Отключается",
+      "free": "Не активен",
+      "rejected": "Отклонено",
+      "paid": "Оплачено"
+    };
+
+    function humanizeStatuses(root = document.body) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const raw = node.nodeValue || "";
+        let next = raw;
+        for (const [code, label] of Object.entries(HUMAN_STATUS)) {
+          next = next.replace(new RegExp("\\b" + code + "\\b", "g"), label);
+        }
+        if (next !== raw) {
+          node.nodeValue = next;
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => humanizeStatuses());
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    setInterval(() => humanizeStatuses(), 800);
+    window.addEventListener("load", () => humanizeStatuses());
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function cleanDriverStatusCell() {
+      const statusCard = Array.from(document.querySelectorAll("div, section, .card"))
+        .find(el => /проверить мой статус/i.test(el.innerText || "") && el.querySelector("button"));
+      if (!statusCard) return;
+
+      const walker = document.createTreeWalker(statusCard, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const raw = node.nodeValue || "";
+        if (/ячейка\s*#\s*\d+/i.test(raw)) {
+          node.nodeValue = raw.replace(/ячейка\s*#\s*\d+\s*[·|•-]?\s*/gi, "").trim();
+        }
+      }
+    }
+
+    const obs = new MutationObserver(() => cleanDriverStatusCell());
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    setInterval(cleanDriverStatusCell, 800);
+    window.addEventListener("load", cleanDriverStatusCell);
+  })();
+  </script>
+
+<script>
+
+        function xsvcSyncButtons(isOpen) {
+      const openBtn = document.getElementById("xsvc-open-btn");
+      const closeBtn = document.getElementById("xsvc-bottom-close-btn");
+      if (openBtn) openBtn.style.setProperty("display", isOpen ? "none" : "block", "important");
+      if (closeBtn) closeBtn.style.setProperty("display", isOpen ? "block" : "none", "important");
+    }
+
+    window.xsvcOpenForm = async function() {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (!panel) return;
+      panel.style.setProperty("display", "block", "important");
+      panel.dataset.xsvcOpen = "1";
+      xsvcSyncButtons(true);
+      if (typeof xsvcCatalog !== "undefined" && !xsvcCatalog.length && typeof xsvcLoadPublic === "function") {
+        await xsvcLoadPublic();
+      }
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+
+    window.xsvcCloseForm = function() {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (!panel) return;
+      panel.dataset.xsvcOpen = "0";
+      panel.style.setProperty("display", "none", "important");
+      xsvcSyncButtons(false);
+    };
+
+    window.xsvcToggleForm = window.xsvcOpenForm;
+
+    setInterval(() => {
+      const panel = document.getElementById("xsvc-order-panel");
+      if (panel && panel.dataset.xsvcOpen === "1" && window.getComputedStyle(panel).display === "none") {
+        panel.style.setProperty("display", "block", "important");
+      }
+    }, 500);
+
+</script>
+
+  <script>
+  (function() {
+    function wrapAdminTables() {
+      ["orders-body", "users-body"].forEach(id => {
+        const tbody = document.getElementById(id);
+        if (!tbody) return;
+        const table = tbody.closest("table");
+        if (!table) return;
+        if (table.parentElement && !table.parentElement.classList.contains("xsvc-table-scroll")) {
+          const wrapper = document.createElement("div");
+          wrapper.className = "xsvc-table-scroll";
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const wrapper = table.parentElement;
+        if (rows.length > 5 && rows[4] && wrapper) {
+          const top = tbody.getBoundingClientRect().top;
+          const bottom5 = rows[4].getBoundingClientRect().bottom;
+          const h = Math.max(210, Math.round(bottom5 - top + 12));
+          wrapper.style.maxHeight = h + "px";
+        } else if (wrapper) {
+          wrapper.style.maxHeight = "320px";
+        }
+      });
+    }
+    setInterval(wrapAdminTables, 700);
+    window.addEventListener("load", wrapAdminTables);
+  })();
+  </script>
+
+
+  <script>
+  (function() {
+    function cleanOrdersTable() {
+      const tbody = document.getElementById("orders-body");
+      if (!tbody) return;
+      tbody.querySelectorAll("tr").forEach(tr => {
+        // Убираем случайные инъекции кнопок и подписей "Место" из истории заявок на оплату
+        tr.querySelectorAll("button").forEach(btn => {
+          if (/^место$/i.test((btn.textContent || "").trim())) btn.remove();
+        });
+        tr.querySelectorAll("div, span").forEach(el => {
+          if (/^место:\s*/i.test((el.textContent || "").trim())) el.remove();
+        });
+      });
+    }
+    setInterval(cleanOrdersTable, 600);
+    window.addEventListener("load", cleanOrdersTable);
+  })();
+  </script>
+
 </body>
 </html>
 
