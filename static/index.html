@@ -262,6 +262,8 @@
     .btn-acc:hover { background: var(--accent); color: #fff; border-color: transparent; }
     .btn-del { width: 30px; height: 30px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); border: 1px solid transparent; font-size: 15px; }
     .btn-del:hover { background: var(--danger); color: #fff; }
+    .btn-danger { background: rgba(255, 59, 48, 0.12); color: var(--danger); border: 1px solid rgba(255, 59, 48, 0.25); }
+    .btn-danger:hover { background: var(--danger); color: #fff; border-color: transparent; }
 
     .msg { margin-top: 8px; font-size: 13px; font-weight: 500; }
     .msg.ok { color: var(--ok); }
@@ -328,6 +330,7 @@
     /* Статус-бейджи */
     .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
     .st-active, .st-paid, .st-sent { background: var(--ok-soft); color: var(--ok); }
+    .st-cancelled { background: rgba(255, 59, 48, 0.12); color: var(--danger); }
     .st-pending, .st-pending_add, .st-pending_del { background: var(--warn-soft); color: var(--warn); }
     .st-paid_by_user { background: var(--accent-soft); color: var(--accent); }
     .st-error, .st-rejected { background: var(--danger-soft); color: var(--danger); }
@@ -551,6 +554,130 @@
       font-size: 12px;
       margin-top: 3px;
     }
+  
+    /* === Hero Redesign === */
+    .hero-pro {
+      background: var(--card, #ffffff);
+      border: 1px solid var(--border, rgba(15, 23, 42, 0.08));
+      border-radius: 22px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, 0.04);
+    }
+    .hero-pro-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .hero-pro-copy {
+      flex: 1 1 320px;
+      min-width: 0;
+    }
+    .hero-pro-copy h1 {
+      margin: 0;
+      font-size: clamp(26px, 3.2vw, 34px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      color: var(--text, #0f172a);
+    }
+    .hero-pro-copy p {
+      margin: 10px 0 0;
+      max-width: 52ch;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--muted, #64748b);
+    }
+    .spots-widget {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      border-radius: 16px;
+      background: rgba(0, 113, 227, 0.06);
+      border: 1px solid rgba(0, 113, 227, 0.16);
+      min-width: 200px;
+      flex-shrink: 0;
+    }
+    .spots-widget-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .spots-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--muted, #64748b);
+      text-transform: uppercase;
+    }
+    .spots-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+      flex-shrink: 0;
+    }
+    .spots-dot.low {
+      background: #f59e0b;
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+    }
+    .spots-dot.empty {
+      background: #ef4444;
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+    }
+    .spots-sub {
+      font-size: 12px;
+      color: var(--muted, #64748b);
+    }
+    .spots-num {
+      margin-left: auto;
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      color: #0071e3;
+    }
+    .hero-pro-desc {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border, rgba(15, 23, 42, 0.08));
+      display: block;
+    }
+    .hero-pro-desc.hidden {
+      display: none !important;
+    }
+    .hero-pro-desc-tag {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #0071e3;
+      background: rgba(0, 113, 227, 0.09);
+      padding: 4px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+    .hero-pro-desc-body {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--text, #0f172a);
+      white-space: pre-line;
+    }
+    @media (max-width: 640px) {
+      .hero-pro { padding: 20px; border-radius: 18px; }
+      .spots-widget { width: 100%; justify-content: space-between; }
+      .hero-pro-desc { flex-direction: column; gap: 8px; }
+    }
+
   </style>
 </head>
 <body>
@@ -568,22 +695,21 @@
   <main class="wrap">
     <!-- Клиент -->
     <section id="tab-client">
-      <div class="hero">
-        <div>
-          <h1>Доступ к парковке</h1>
-          <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
-        </div>
-        <div class="hero-badges">
-          <div id="free-spots-badge" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:155px;padding:12px 22px;border-radius:16px;background:linear-gradient(135deg,#0071e3,#0a84ff);color:#fff;box-shadow:0 6px 20px rgba(0,113,227,0.28);">
-            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;opacity:.9;">Свободных мест</span>
-            <span id="free-spots-num" style="font-size:34px;font-weight:800;line-height:1.1;margin-top:2px;">—</span>
+            <section class="hero-pro">
+        <div class="hero-pro-top">
+          <div class="hero-pro-copy">
+            <h1>Доступ к парковке</h1>
+            <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
+          </div>
+          <div class="spots-widget" id="free-spots-badge">
+            <span class="spots-live"><span class="spots-dot" id="free-spots-dot"></span>Свободных мест</span>
+            <div class="spots-num" id="free-spots-num">—</div>
           </div>
         </div>
-      </div>
-      <div id="parking-desc-card" class="card hidden" style="margin-bottom:18px;">
-        <div class="card-head" style="margin-bottom:8px;"><h2>Описание</h2></div>
-        <div id="parking-desc-text" style="white-space:pre-line;line-height:1.55;font-size:14px;color:var(--text);"></div>
-      </div>
+        <div id="parking-desc-card" class="hero-pro-desc hidden">
+          <div id="parking-desc-text" class="hero-pro-desc-body"></div>
+        </div>
+      </section>
 
       <div class="grid-2">
         <div class="card">
@@ -851,10 +977,13 @@
         </div>
 
         <div class="card no-print">
-          <div class="card-head"><h2>Очередь SMS на RX100-R4</h2></div>
+          <div class="card-head">
+            <h2>Очередь SMS на RX100-R4</h2>
+            <button class="btn btn-sm btn-danger" onclick="clearPendingSms()">Очистить ожидающие</button>
+          </div>
           <div class="table-wrap xsvc-table-scroll">
             <table>
-              <thead><tr><th>ID</th><th>Время</th><th>Ячейка</th><th>Команда</th><th>Статус</th></tr></thead>
+              <thead><tr><th>ID</th><th>Время</th><th>Ячейка</th><th>Команда</th><th>Статус</th><th>Действие</th></tr></thead>
               <tbody id="queue-body"></tbody>
             </table>
           </div>
@@ -874,10 +1003,6 @@
 
           <div id="pay-panel" class="hidden">
             <div class="card">
-<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить СБП</button>
-          </div>
-        </div>
 
 <div class="card-head">
                 <h2>Приём платежей и автоподписки</h2>
@@ -1019,6 +1144,12 @@
         const d = await r.json();
         if (numEl && typeof d.free_spots === 'number') {
           numEl.textContent = d.free_spots;
+          const dot = document.getElementById('free-spots-dot');
+          if (dot) {
+            dot.classList.remove('low', 'empty');
+            if (d.free_spots === 0) dot.classList.add('empty');
+            else if (d.free_spots <= 5) dot.classList.add('low');
+          }
         }
         const descCard = document.getElementById('parking-desc-card');
         const descText = document.getElementById('parking-desc-text');
@@ -1132,15 +1263,34 @@
         payBox.classList.remove('hidden');
         const p = data.payment;
         const promoText = data.promo_code ? ` (${data.promo_code} -${data.discount_percent}%)` : '';
-        payBox.innerHTML = `
-          <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
-          <div>СБП: <b>${p.sbp_phone}</b> (${p.sbp_bank})</div>
-          <div style="color:var(--muted); margin-bottom:6px;">Получатель: ${p.sbp_recipient}</div>
-          <div class="pay-actions">
-            <button class="btn btn-sm btn-secondary" onclick="copyText('${p.sbp_phone}', this)">Скопировать номер</button>
-            <button class="btn btn-sm btn-ok" onclick="markUserPaid(${data.order_id}, this)">Я оплатил</button>
-          </div>
-        `;
+        const prov = (data.pay_provider || 'manual').toLowerCase();
+        const provNames = { yookassa: 'ЮKassa', robokassa: 'Robokassa', tbank: 'Т-Банк', cloudpayments: 'CloudPayments' };
+        if (prov !== 'manual') {
+          if (data.payment_url) {
+            payBox.innerHTML = `
+              <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
+              <div style="color:var(--muted); margin-bottom:10px;">Способ оплаты: <b>${provNames[prov] || prov}</b></div>
+              <div class="pay-actions">
+                <a class="btn btn-sm btn-primary" href="${data.payment_url}" target="_blank" rel="noopener" style="text-decoration:none;">Оплатить онлайн</a>
+              </div>
+            `;
+          } else {
+            payBox.innerHTML = `
+              <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
+              <div class="msg err" style="margin:0;">${data.payment_error || 'Не удалось создать ссылку на оплату. Проверьте настройки провайдера в админке.'}</div>
+            `;
+          }
+        } else {
+          payBox.innerHTML = `
+            <div style="font-weight:600; margin-bottom:6px;">Заявка #${data.order_id} · К оплате ${data.amount} ₽${promoText}</div>
+            <div>СБП: <b>${p.sbp_phone}</b> (${p.sbp_bank})</div>
+            <div style="color:var(--muted); margin-bottom:6px;">Получатель: ${p.sbp_recipient}</div>
+            <div class="pay-actions">
+              <button class="btn btn-sm btn-secondary" onclick="copyText('${p.sbp_phone}', this)">Скопировать номер</button>
+              <button class="btn btn-sm btn-ok" onclick="markUserPaid(${data.order_id}, this)">Я оплатил</button>
+            </div>
+          `;
+        }
       } else {
         msg.textContent = data.detail || 'Ошибка';
         msg.className = 'msg err';
@@ -1235,15 +1385,20 @@
 
     function renderQrs(botUser) {
       const siteUrl = window.location.origin;
+      const siteQr = `/api/qr?data=${encodeURIComponent(siteUrl)}`;
       let html = `<div class="qr-item">
-        <img src="/api/qr?data=${encodeURIComponent(siteUrl)}" alt="QR Сайт" />
+        <img src="${siteQr}" alt="QR Сайт" />
         <b>Оплата парковки (Сайт)</b><br><small>${siteUrl}</small>
+        <div style="margin-top:10px;"><a class="btn btn-sm btn-secondary no-print" href="${siteQr}" download="qr_parking_site.svg">Скачать SVG</a></div>
       </div>`;
       if (botUser) {
-        const botUrl = 'https://t.me/' + botUser.replace(/^@/, '');
+        const botName = botUser.replace(/^@/, '');
+        const botUrl = 'https://t.me/' + botName;
+        const botQr = `/api/qr?data=${encodeURIComponent(botUrl)}`;
         html += `<div class="qr-item">
-          <img src="/api/qr?data=${encodeURIComponent(botUrl)}" alt="QR Бот" />
-          <b>Telegram-бот парковки</b><br><small>@${botUser.replace(/^@/, '')}</small>
+          <img src="${botQr}" alt="QR Бот" />
+          <b>Telegram-бот парковки</b><br><small>@${botName}</small>
+          <div style="margin-top:10px;"><a class="btn btn-sm btn-secondary no-print" href="${botQr}" download="qr_parking_bot.svg">Скачать SVG</a></div>
         </div>`;
       }
       document.getElementById('qr-box').innerHTML = html;
@@ -1350,14 +1505,32 @@
       renderUsers();
 
       const queue = await qRes.json();
-      const qSt = { pending: 'ожидает', sent: 'отправлено', error: 'ошибка' };
+      const qSt = { pending: 'ожидает', sent: 'отправлено', error: 'ошибка', cancelled: 'отменено' };
       document.getElementById('queue-body').innerHTML = queue.map(q => `<tr>
         <td>${q.id}</td><td><span style="color:var(--muted)">${q.created_at}</span></td><td>${q.slot ? '#' + q.slot : '—'}</td>
         <td><code>${q.command}</code></td><td><span class="pill st-${q.status}">${qSt[q.status] || q.status}</span></td>
+        <td>${q.status === 'pending' ? `<button class="btn btn-sm btn-danger" onclick="cancelSms(${q.id})">Отменить</button>` : '<span style="color:var(--muted)">—</span>'}</td>
       </tr>`).join('');
 
       admLoadExtraServices();
       admLoadServiceOrders();
+    }
+
+    async function cancelSms(id) {
+      await fetch(`/api/admin/queue/${id}/cancel`, {
+        method: 'POST',
+        headers: {'X-Admin-Password': getAdminPass()}
+      });
+      loadAdmin();
+    }
+
+    async function clearPendingSms() {
+      if (!confirm('Отменить все ожидающие SMS в очереди?')) return;
+      await fetch('/api/admin/queue/clear-pending', {
+        method: 'POST',
+        headers: {'X-Admin-Password': getAdminPass()}
+      });
+      loadAdmin();
     }
 
     async function openGateNow() {

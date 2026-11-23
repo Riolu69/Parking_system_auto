@@ -310,7 +310,36 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
         slot.notified_expiring = False
         if not slot.spot_label:
             slot.spot_label = await _pick_next_free_spot(session)
-        if slot.status != "active":
+        if slot.status == "active":
+            pass
+        elif slot.status == "pending_add":
+            existing_q = (await session.execute(
+                select(SmsQueue).where(
+                    SmsQueue.slot_number == slot.slot_number,
+                    SmsQueue.action == "add",
+                    SmsQueue.status == "pending",
+                )
+            )).scalar_one_or_none()
+            if not existing_q:
+                cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
+                session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
+        elif slot.status == "pending_del":
+            del_qs = (await session.execute(
+                select(SmsQueue).where(
+                    SmsQueue.slot_number == slot.slot_number,
+                    SmsQueue.action == "delete",
+                    SmsQueue.status == "pending",
+                )
+            )).scalars().all()
+            if del_qs:
+                for dq in del_qs:
+                    dq.status = "cancelled"
+                slot.status = "active"
+            else:
+                slot.status = "pending_add"
+                cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
+                session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
+        else:
             slot.status = "pending_add"
             cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
             session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))

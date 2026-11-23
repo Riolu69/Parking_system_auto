@@ -1,3 +1,4 @@
+from app.payments import create_payment_for_order
 import secrets
 import segno
 import asyncio
@@ -320,6 +321,7 @@ async def api_register(data: RegisterReq):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         cfg = await get_app_settings(session)
+        pay_res = await create_payment_for_order(session, order, return_url="https://parking.vonline.net.ru/")
         return {
             "ok": True,
             "user_id": user.id,
@@ -329,6 +331,9 @@ async def api_register(data: RegisterReq):
             "discount_percent": order.discount_percent,
             "phone": user.phone,
             "payment": cfg,
+            "pay_provider": pay_res["provider"],
+            "payment_url": pay_res["payment_url"],
+            "payment_error": pay_res["error"],
         }
 
 
@@ -861,6 +866,29 @@ async def admin_queue():
             }
             for q in res.scalars().all()
         ]
+
+
+@app.post("/api/admin/queue/{task_id}/cancel", dependencies=[Depends(verify_admin)])
+async def admin_cancel_sms(task_id: int):
+    async with async_session() as session:
+        q = await session.get(SmsQueue, task_id)
+        if not q:
+            raise HTTPException(status_code=404, detail="Задача не найдена")
+        if q.status == "pending":
+            q.status = "cancelled"
+            await session.commit()
+        return {"ok": True}
+
+
+@app.post("/api/admin/queue/clear-pending", dependencies=[Depends(verify_admin)])
+async def admin_clear_pending_sms():
+    async with async_session() as session:
+        res = await session.execute(select(SmsQueue).where(SmsQueue.status == "pending"))
+        items = res.scalars().all()
+        for q in items:
+            q.status = "cancelled"
+        await session.commit()
+        return {"ok": True, "cancelled": len(items)}
 
 
 @app.get("/api/internal/sms/next", dependencies=[Depends(verify_worker)])
