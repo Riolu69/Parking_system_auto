@@ -5,7 +5,9 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import User, Vehicle, RtuSlot, SmsQueue, Tariff, Order, PromoCode, AppSetting, ExtraService, ServiceOrder
+from app.database import (
+    User, Vehicle, RtuSlot, SmsQueue, Tariff, Order, PromoCode, AppSetting, ExtraService, ServiceOrder
+)
 
 
 def normalize_phone(phone: str) -> str:
@@ -35,12 +37,18 @@ def calc_valid_until(tariff: Tariff, current_until: datetime | None = None) -> d
 async def get_app_settings(session: AsyncSession) -> dict:
     res = await session.execute(select(AppSetting))
     data = {s.key: s.value for s in res.scalars().all()}
+    raw_max = data.get("max_spots", "200")
+    try:
+        max_spots = max(0, int(str(raw_max).strip()))
+    except ValueError:
+        max_spots = 200
     return {
         "sbp_phone": data.get("sbp_phone", ""),
         "sbp_bank": data.get("sbp_bank", ""),
         "sbp_recipient": data.get("sbp_recipient", ""),
         "gate_phone": data.get("gate_phone", settings.RTU_PHONE),
         "bot_username": data.get("bot_username", ""),
+        "max_spots": max_spots,
     }
 
 
@@ -60,8 +68,6 @@ def parse_tariff_ids(raw: str | None) -> list[int]:
     if not raw:
         return []
     return [int(x) for x in raw.split(",") if x.strip().isdigit()]
-
-
 
 
 PAYMENT_SETTING_DEFAULTS = {
@@ -175,7 +181,11 @@ async def register_user_and_car(
 
 
 async def create_order(
-    session: AsyncSession, user_id: int, tariff_id: int, promo_code: str | None = None, vehicle_id: int | None = None
+    session: AsyncSession,
+    user_id: int,
+    tariff_id: int,
+    promo_code: str | None = None,
+    vehicle_id: int | None = None,
 ) -> Order:
     tariff = await session.get(Tariff, tariff_id)
     if not tariff:
@@ -189,7 +199,6 @@ async def create_order(
             discount = promo.discount_percent
             applied_code = promo.code
         except ValueError:
-            # Невалидный промокод не блокирует оплату
             discount = 0
             applied_code = None
 
@@ -235,56 +244,55 @@ async def reject_order(session: AsyncSession, order_id: int) -> Order:
     return order
 
 
+async def _pick_next_free_spot(session: AsyncSession) -> str:
+    res = await session.execute(select(RtuSlot.spot_label).where(RtuSlot.spot_label != None, RtuSlot.status != "free"))
+    used = {str(r[0]).strip() for r in res.all() if r[0]}
+    n = 1
+    while str(n) in used:
+        n += 1
+    return str(n)
 
 
-async def _pick_next_free_spot(session: AsyncSession, preferred_spot: str | None = None) -> str:
-    clean = (preferred_spot or "").strip()
-    res = await session.execute(select(RtuSlot.spot_label).where(RtuSlot.spot_label != None))
-    taken = {str(r[0]).strip().lower() for r in res.all() if r[0]}
-    if clean and clean.lower() not in taken:
-        return clean
-    for i in range(1, 201):
-        cand = str(i)
-        if cand.lower() not in taken:
-            return cand
-    return f"M-{int(datetime.utcnow().timestamp()) % 1000}"
-
-
-async def assign_spot_to_user(session: AsyncSession, user_id: int, spot_label: str | None = None) -> RtuSlot:
+async def set_user_spot(session: AsyncSession, user_id: int, spot_label: str) -> RtuSlot:
     res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == user_id))
     slot = res.scalar_one_or_none()
-    chosen = await _pick_next_free_spot(session, spot_label)
-    if slot:
-        slot.spot_label = chosen
-        await session.commit()
-        return slot
+    if not slot:
+        raise ValueError("У пользователя нет активной ячейки")
+    slot.spot_label = spot_label.strip() or None
+    await session.commit()
+    return slot
 
-    free_res = await session.execute(
-        select(RtuSlot).where(RtuSlot.status == "free").order_by(RtuSlot.slot_number).limit(1)
+
+async def create_service_order(session: AsyncSession, service_id: int, phone: str, spot: str, comment: str = "") -> ServiceOrder:
+    svc = await session.get(ExtraService, service_id)
+    if not svc or not svc.is_active:
+        raise ValueError("Услуга не найдена")
+    order = ServiceOrder(
+        service_id=svc.id,
+        phone=normalize_phone(phone),
+        spot=(spot or "").strip(),
+        comment=(comment or "").strip(),
+        amount=svc.price,
+        status="pending",
     )
-    free_slot = free_res.scalar_one_or_none()
-    if free_slot:
-        free_slot.user_id = user_id
-        free_slot.spot_label = chosen
-        await session.commit()
-        return free_slot
-
-    raise ValueError("Нет свободных ячеек для привязки места")
+    session.add(order)
+    await session.commit()
+    res = await session.execute(select(ServiceOrder).options(selectinload(ServiceOrder.service)).where(ServiceOrder.id == order.id))
+    return res.scalar_one()
 
 
-
-
-async def backfill_spots(session: AsyncSession) -> int:
-    res = await session.execute(select(RtuSlot).where(RtuSlot.user_id != None, RtuSlot.status != "free").order_by(RtuSlot.slot_number))
-    slots = res.scalars().all()
-    updated = 0
-    for s in slots:
-        if not s.spot_label:
-            s.spot_label = await _pick_next_free_spot(session)
-            updated += 1
-    if updated:
-        await session.commit()
-    return updated
+async def get_spots_availability(session: AsyncSession) -> dict:
+    cfg = await get_app_settings(session)
+    max_spots = cfg["max_spots"]
+    used = (await session.execute(
+        select(func.count(RtuSlot.slot_number)).where(RtuSlot.status != "free")
+    )).scalar() or 0
+    free_spots = max(0, max_spots - int(used))
+    return {
+        "max_spots": max_spots,
+        "used_spots": int(used),
+        "free_spots": free_spots,
+    }
 
 
 async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Tariff) -> RtuSlot:
@@ -296,27 +304,38 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
     slot = res.scalar_one_or_none()
 
     if slot:
-        if not slot.spot_label:
-            slot.spot_label = await _pick_next_free_spot(session)
         slot.valid_until = calc_valid_until(tariff, slot.valid_until)
         slot.notified_expiring = False
+        if not slot.spot_label:
+            slot.spot_label = await _pick_next_free_spot(session)
         if slot.status != "active":
             slot.status = "pending_add"
             cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
             session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
     else:
+        avail = await get_spots_availability(session)
+        if avail["free_spots"] <= 0:
+            raise ValueError(f"Нет свободных парковочных мест (лимит: {avail['max_spots']})")
+
         free_res = await session.execute(
-            select(RtuSlot).where(RtuSlot.status == "free").order_by(RtuSlot.slot_number).limit(1)
+            select(RtuSlot)
+            .where(RtuSlot.status == "free", RtuSlot.slot_number <= avail["max_spots"])
+            .order_by(RtuSlot.slot_number)
+            .limit(1)
         )
         slot = free_res.scalar_one_or_none()
+        if not slot:
+            free_res = await session.execute(
+                select(RtuSlot).where(RtuSlot.status == "free").order_by(RtuSlot.slot_number).limit(1)
+            )
+            slot = free_res.scalar_one_or_none()
         if not slot:
             raise ValueError("Нет свободных ячеек в RTU5024 (все 200 заняты)")
 
         slot.user_id = user.id
-        if not slot.spot_label:
-            slot.spot_label = await _pick_next_free_spot(session)
         slot.valid_until = calc_valid_until(tariff)
         slot.notified_expiring = False
+        slot.spot_label = await _pick_next_free_spot(session)
         slot.status = "pending_add"
         cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
         session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
@@ -342,6 +361,7 @@ async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, 
     if order.vehicle:
         order.vehicle.valid_until = calc_valid_until(order.tariff, order.vehicle.valid_until)
         target_until = order.vehicle.valid_until
+
     slot = await grant_access_by_tariff(session, order.user_id, order.tariff)
     if target_until:
         v_res = await session.execute(select(func.max(Vehicle.valid_until)).where(Vehicle.user_id == order.user_id))
@@ -351,6 +371,7 @@ async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, 
         elif target_until and (not slot.valid_until or target_until > slot.valid_until):
             slot.valid_until = target_until
         await session.commit()
+
     return slot, order.user
 
 
@@ -373,7 +394,6 @@ async def revoke_access(session: AsyncSession, user_id: int) -> RtuSlot:
 
 
 async def queue_open_gate(session: AsyncSession) -> SmsQueue:
-    """Ставит в очередь SMS-команду принудительного открытия реле RTU5024."""
     cmd = f"{settings.RTU_PASSWORD}CC"
     task = SmsQueue(slot_number=None, action="open", command_text=cmd)
     session.add(task)
@@ -469,58 +489,6 @@ async def report_sms_task(session: AsyncSession, task_id: int, status: str, erro
                 slot.user_id = None
                 slot.valid_until = None
                 slot.notified_expiring = False
+                slot.spot_label = None
 
     await session.commit()
-
-
-async def list_extra_services(session: AsyncSession, only_active: bool = True) -> list[ExtraService]:
-    stmt = select(ExtraService).order_by(ExtraService.id)
-    if only_active:
-        stmt = stmt.where(ExtraService.is_active == True)
-    res = await session.execute(stmt)
-    return list(res.scalars().all())
-
-
-async def create_service_order(
-    session: AsyncSession,
-    service_id: int,
-    phone: str,
-    spot: str,
-    comment: str = "",
-) -> ServiceOrder:
-    svc = await session.get(ExtraService, service_id)
-    if not svc or not svc.is_active:
-        raise ValueError("Услуга не найдена или неактивна")
-    norm_phone = normalize_phone(phone)
-    if not norm_phone:
-        raise ValueError("Укажите корректный номер телефона")
-    clean_spot = (spot or "").strip()
-    if not clean_spot:
-        raise ValueError("Укажите парковочное место")
-    order = ServiceOrder(
-        service_id=svc.id,
-        phone=norm_phone,
-        spot=clean_spot,
-        comment=(comment or "").strip(),
-        amount=max(0, int(svc.price)),
-        status="pending",
-    )
-    session.add(order)
-    await session.commit()
-    res = await session.execute(
-        select(ServiceOrder).options(selectinload(ServiceOrder.service)).where(ServiceOrder.id == order.id)
-    )
-    return res.scalar_one()
-
-
-async def mark_service_order_paid(session: AsyncSession, order_id: int) -> ServiceOrder:
-    res = await session.execute(
-        select(ServiceOrder).options(selectinload(ServiceOrder.service)).where(ServiceOrder.id == order_id)
-    )
-    order = res.scalar_one_or_none()
-    if not order:
-        raise ValueError("Заказ допуслуги не найден")
-    if order.status == "pending":
-        order.status = "paid_by_user"
-        await session.commit()
-    return order
