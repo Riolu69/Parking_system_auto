@@ -569,8 +569,13 @@
     <!-- Клиент -->
     <section id="tab-client">
       <div class="hero">
-        <h1>Доступ к парковке</h1>
-        <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
+        <div>
+          <h1>Доступ к парковке</h1>
+          <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
+        </div>
+        <div class="hero-badges">
+          <div class="h-badge acc" id="free-spots-badge">Свободных мест: —</div>
+        </div>
       </div>
 
       <div class="grid-2">
@@ -732,6 +737,7 @@
             <input id="set-sbp-rec" placeholder="Получатель" style="width:150px;" />
             <input id="set-gate-phone" type="tel" inputmode="tel" placeholder="Номер шлагбаума" style="width:165px;" />
             <input id="set-bot-user" placeholder="Юзернейм бота (без @)" style="width:170px;" />
+            <input id="set-max-spots" type="number" inputmode="numeric" min="0" placeholder="Макс. мест" title="Максимальное число мест" style="width:125px;" />
             <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить</button>
           </div>
           <div id="pay-set-msg" class="msg ok"></div>
@@ -959,6 +965,20 @@
         document.getElementById('pl-main').textContent = clean.slice(0, 6);
         document.getElementById('pl-reg').textContent = clean.slice(6, 9) || 'RUS';
       }
+    }
+
+
+    async function loadFreeSpots() {
+      const badge = document.getElementById('free-spots-badge');
+      if (!badge) return;
+      try {
+        const r = await fetch('/api/settings');
+        if (!r.ok) return;
+        const d = await r.json();
+        if (typeof d.free_spots === 'number') {
+          badge.textContent = `Свободных мест: ${d.free_spots}`;
+        }
+      } catch (e) {}
     }
 
     async function loadTariffs() {
@@ -1334,12 +1354,14 @@
           sbp_recipient: document.getElementById('set-sbp-rec').value,
           gate_phone: document.getElementById('set-gate-phone').value,
           bot_username: document.getElementById('set-bot-user').value,
+          max_spots: parseInt(document.getElementById('set-max-spots').value, 10) || 0,
         }),
       });
       const m = document.getElementById('pay-set-msg');
       m.textContent = 'Настройки сохранены';
       setTimeout(() => m.textContent = '', 2000);
       loadAdmin();
+      loadFreeSpots();
     }
 
     async function createPromo() {
@@ -2010,6 +2032,7 @@
     window.addEventListener('hashchange', initRoute);
 
     loadTariffs();
+    loadFreeSpots();
     xsvcLoadPublic();
   </script>
 </body>
