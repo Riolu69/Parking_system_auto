@@ -45,7 +45,32 @@ class PromoCode(Base):
     target_audience = Column(String(20), default="all", nullable=False)
     tariff_ids = Column(String(255), default="", nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class ExtraService(Base):
+    __tablename__ = "extra_services"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    price = Column(Integer, nullable=False, default=0)
+    description = Column(Text, default="", nullable=False)
+    is_active = Column(Boolean, default=True)
+
+
+class ServiceOrder(Base):
+    __tablename__ = "service_orders"
+
+    id = Column(Integer, primary_key=True)
+    service_id = Column(Integer, ForeignKey("extra_services.id"), nullable=False)
+    phone = Column(String(20), nullable=False)
+    spot = Column(String(50), default="", nullable=False)
+    comment = Column(Text, default="", nullable=False)
+    amount = Column(Integer, nullable=False)
+    status = Column(String(20), default="pending")
+    created_at = Column(DateTime, default=datetime.now)
+
+    service = relationship("ExtraService")
 
 
 class User(Base):
@@ -56,7 +81,7 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, nullable=True, index=True)
     full_name = Column(String(100), nullable=True)
     is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     vehicles = relationship("Vehicle", back_populates="user", cascade="all, delete-orphan")
     slot = relationship("RtuSlot", back_populates="user", uselist=False)
@@ -71,7 +96,7 @@ class Vehicle(Base):
     plate_number = Column(String(20), nullable=False)
     car_model = Column(String(100), nullable=True)
     valid_until = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="vehicles")
 
@@ -87,7 +112,7 @@ class Order(Base):
     promo_code = Column(String(50), nullable=True)
     discount_percent = Column(Integer, default=0)
     status = Column(String(20), default="pending")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="orders")
     tariff = relationship("Tariff")
@@ -101,8 +126,8 @@ class RtuSlot(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     valid_until = Column(DateTime, nullable=True)
     status = Column(String(20), default="free")
-    spot_label = Column(String(50), nullable=True)
     notified_expiring = Column(Boolean, default=False)
+    spot_label = Column(String(50), nullable=True)
 
     user = relationship("User", back_populates="slot")
 
@@ -112,20 +137,13 @@ class SmsQueue(Base):
 
     id = Column(Integer, primary_key=True)
     slot_number = Column(Integer, ForeignKey("rtu_slots.slot_number"), nullable=True)
-    action = Column(String(15), nullable=False)  # add, delete, open
+    action = Column(String(15), nullable=False)
     command_text = Column(String(100), nullable=False)
     status = Column(String(20), default="pending")
     error_msg = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-
-
-DEFAULT_EXTRA_SERVICES = [
-    {"name": "Мойка автомобиля", "price": 800, "description": "Экспресс-мойка на территории парковки", "is_active": True},
-    {"name": "Зарядка электромобиля", "price": 500, "description": "Подключение к зарядной станции", "is_active": True},
-    {"name": "Подкачка шин / запуск двигателя", "price": 400, "description": "Помощь дежурного на месте", "is_active": True},
-]
 
 DEFAULT_TARIFFS = [
     {"code": "night", "name": "На ночь (21:00–08:00)", "price": 200, "days": 0, "is_night": True},
@@ -142,6 +160,7 @@ DEFAULT_SETTINGS = {
     "sbp_recipient": "Парковка",
     "gate_phone": settings.RTU_PHONE,
     "bot_username": "",
+    "max_spots": "200",
 }
 
 
@@ -173,36 +192,8 @@ async def init_db():
         if (await session.execute(select(Tariff.id).limit(1))).scalar() is None:
             session.add_all([Tariff(**t) for t in DEFAULT_TARIFFS])
 
-        if (await session.execute(select(ExtraService.id).limit(1))).scalar() is None:
-            session.add_all([ExtraService(**s) for s in DEFAULT_EXTRA_SERVICES])
-
         for k, v in DEFAULT_SETTINGS.items():
             if await session.get(AppSetting, k) is None:
                 session.add(AppSetting(key=k, value=v))
 
         await session.commit()
-
-
-class ExtraService(Base):
-    __tablename__ = "extra_services"
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String(120), nullable=False)
-    price = Column(Integer, nullable=False)
-    description = Column(Text, default="", nullable=False)
-    is_active = Column(Boolean, default=True)
-
-
-class ServiceOrder(Base):
-    __tablename__ = "service_orders"
-
-    id = Column(Integer, primary_key=True)
-    service_id = Column(Integer, ForeignKey("extra_services.id"), nullable=False)
-    phone = Column(String(20), nullable=False)
-    spot = Column(String(100), nullable=False)
-    comment = Column(Text, default="", nullable=False)
-    amount = Column(Integer, nullable=False)
-    status = Column(String(20), default="pending")
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    service = relationship("ExtraService")
