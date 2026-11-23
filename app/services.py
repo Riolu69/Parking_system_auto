@@ -49,6 +49,8 @@ async def get_app_settings(session: AsyncSession) -> dict:
         "gate_phone": data.get("gate_phone", settings.RTU_PHONE),
         "bot_username": data.get("bot_username", ""),
         "max_spots": max_spots,
+        "description_enabled": data.get("description_enabled", "0") in ("1", "true", "True", True),
+        "description_text": data.get("description_text", ""),
     }
 
 

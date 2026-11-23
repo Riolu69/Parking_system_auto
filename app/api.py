@@ -155,6 +155,8 @@ class SettingsReq(BaseModel):
     gate_phone: str
     bot_username: str = ""
     max_spots: int = 200
+    description_enabled: bool = False
+    description_text: str = ""
 
 
 class TariffCreateReq(BaseModel):
@@ -524,6 +526,7 @@ async def admin_set_settings(data: SettingsReq):
     async with async_session() as session:
         payload = data.model_dump()
         payload["max_spots"] = max(0, int(payload.get("max_spots", 200)))
+        payload["description_enabled"] = "1" if payload.get("description_enabled") else "0"
         await set_app_settings(session, payload)
         return {"ok": True}
 

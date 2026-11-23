@@ -161,6 +161,8 @@ DEFAULT_SETTINGS = {
     "gate_phone": settings.RTU_PHONE,
     "bot_username": "",
     "max_spots": "200",
+    "description_enabled": "0",
+    "description_text": "",
 }
 
 

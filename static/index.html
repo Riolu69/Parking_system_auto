@@ -574,8 +574,15 @@
           <p>Зарегистрируйте автомобиль и выберите тариф — номер телефона добавится в базу автоматически.</p>
         </div>
         <div class="hero-badges">
-          <div class="h-badge acc" id="free-spots-badge">Свободных мест: —</div>
+          <div id="free-spots-badge" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:155px;padding:12px 22px;border-radius:16px;background:linear-gradient(135deg,#0071e3,#0a84ff);color:#fff;box-shadow:0 6px 20px rgba(0,113,227,0.28);">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;opacity:.9;">Свободных мест</span>
+            <span id="free-spots-num" style="font-size:34px;font-weight:800;line-height:1.1;margin-top:2px;">—</span>
+          </div>
         </div>
+      </div>
+      <div id="parking-desc-card" class="card hidden" style="margin-bottom:18px;">
+        <div class="card-head" style="margin-bottom:8px;"><h2>Описание</h2></div>
+        <div id="parking-desc-text" style="white-space:pre-line;line-height:1.55;font-size:14px;color:var(--text);"></div>
       </div>
 
       <div class="grid-2">
@@ -730,17 +737,34 @@
         </div>
 
         <div class="card no-print">
-          <div class="card-head"><h2>Настройки (СБП, шлагбаум, бот)</h2></div>
-          <div class="bar-row">
-            <input id="set-sbp-phone" type="tel" inputmode="tel" placeholder="Телефон СБП" style="width:165px;" />
-            <input id="set-sbp-bank" placeholder="Банк" style="width:165px;" />
-            <input id="set-sbp-rec" placeholder="Получатель" style="width:150px;" />
-            <input id="set-gate-phone" type="tel" inputmode="tel" placeholder="Номер шлагбаума" style="width:165px;" />
-            <input id="set-bot-user" placeholder="Юзернейм бота (без @)" style="width:170px;" />
-            <input id="set-max-spots" type="number" inputmode="numeric" min="0" placeholder="Макс. мест" title="Максимальное число мест" style="width:125px;" />
-            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить</button>
+                    <div class="card-head"><h2>Настройки парковки и бота</h2></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;">
+            <div>
+              <label for="set-max-spots" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Всего мест на парковке</label>
+              <input id="set-max-spots" type="number" inputmode="numeric" min="0" placeholder="200" style="width:100%;" />
+            </div>
+            <div>
+              <label for="set-gate-phone" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Номер шлагбаума</label>
+              <input id="set-gate-phone" type="tel" inputmode="tel" placeholder="+79990000000" style="width:100%;" />
+            </div>
+            <div>
+              <label for="set-bot-user" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Юзернейм бота (без @)</label>
+              <input id="set-bot-user" placeholder="my_parking_bot" style="width:100%;" />
+            </div>
           </div>
-          <div id="pay-set-msg" class="msg ok"></div>
+
+          <div style="margin-bottom:14px;padding-top:12px;border-top:1px solid var(--border);">
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;">
+              <input id="set-desc-enabled" type="checkbox" style="width:auto;" />
+              Показывать блок «Описание» на главной
+            </label>
+            <textarea id="set-desc-text" rows="4" placeholder="Напишите преимущества вашей парковки (круглосуточная охрана, видеонаблюдение, удобный выезд...)" style="width:100%;resize:vertical;"></textarea>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить настройки</button>
+            <div id="pay-set-msg" class="msg ok" style="margin:0;"></div>
+          </div>
         </div>
 
         <div class="card no-print">
@@ -850,7 +874,12 @@
 
           <div id="pay-panel" class="hidden">
             <div class="card">
-              <div class="card-head">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить СБП</button>
+          </div>
+        </div>
+
+<div class="card-head">
                 <h2>Приём платежей и автоподписки</h2>
                 <button id="btn-autorenew" class="btn btn-sm btn-secondary" onclick="toggleAutoRenew()">Автоподписки: Выключены</button>
               </div>
@@ -864,6 +893,20 @@
                   <option value="cloudpayments">CloudPayments</option>
                 </select>
               </div>
+          <div id="sbp-fields-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:12px 0;">
+            <div>
+              <label for="set-sbp-phone" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Телефон СБП</label>
+              <input id="set-sbp-phone" type="tel" inputmode="tel" placeholder="+7 999 000-00-00" style="width:100%;" />
+            </div>
+            <div>
+              <label for="set-sbp-bank" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Банк</label>
+              <input id="set-sbp-bank" placeholder="Сбербанк / Т-Банк" style="width:100%;" />
+            </div>
+            <div>
+              <label for="set-sbp-rec" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Получатель</label>
+              <input id="set-sbp-rec" placeholder="Парковка" style="width:100%;" />
+            </div>
+          </div>
 
               <div id="prov-manual" class="prov-box" style="color:var(--muted); font-size:13px; margin:10px 0;">
                 Используются реквизиты СБП из вкладки «Основное → Настройки».
@@ -903,7 +946,7 @@
                 <code id="pay-webhook-url"></code>
               </div>
 
-              <button class="btn btn-primary" onclick="savePaymentSettings()">Сохранить настройки платежей</button>
+              <button class="btn btn-primary" onclick="saveSettings(); savePaymentSettings()">Сохранить настройки платежей</button>
               <div id="pay-save-msg" class="msg ok"></div>
             </div>
           </div>
@@ -969,14 +1012,23 @@
 
 
     async function loadFreeSpots() {
-      const badge = document.getElementById('free-spots-badge');
-      if (!badge) return;
+      const numEl = document.getElementById('free-spots-num');
       try {
         const r = await fetch('/api/settings');
         if (!r.ok) return;
         const d = await r.json();
-        if (typeof d.free_spots === 'number') {
-          badge.textContent = `Свободных мест: ${d.free_spots}`;
+        if (numEl && typeof d.free_spots === 'number') {
+          numEl.textContent = d.free_spots;
+        }
+        const descCard = document.getElementById('parking-desc-card');
+        const descText = document.getElementById('parking-desc-text');
+        if (descCard && descText) {
+          if (d.description_enabled && (d.description_text || '').trim()) {
+            descText.textContent = d.description_text;
+            descCard.classList.remove('hidden');
+          } else {
+            descCard.classList.add('hidden');
+          }
         }
       } catch (e) {}
     }
@@ -1228,6 +1280,9 @@
       document.getElementById('set-sbp-rec').value = cfg.sbp_recipient;
       document.getElementById('set-gate-phone').value = cfg.gate_phone;
       document.getElementById('set-bot-user').value = cfg.bot_username;
+      document.getElementById('set-max-spots').value = cfg.max_spots ?? 200;
+      document.getElementById('set-desc-enabled').checked = !!cfg.description_enabled;
+      document.getElementById('set-desc-text').value = cfg.description_text || '';
       renderQrs(cfg.bot_username);
 
       const orders = await oRes.json();
@@ -1355,6 +1410,8 @@
           gate_phone: document.getElementById('set-gate-phone').value,
           bot_username: document.getElementById('set-bot-user').value,
           max_spots: parseInt(document.getElementById('set-max-spots').value, 10) || 0,
+          description_enabled: document.getElementById('set-desc-enabled').checked,
+          description_text: document.getElementById('set-desc-text').value,
         }),
       });
       const m = document.getElementById('pay-set-msg');
@@ -1362,6 +1419,17 @@
       setTimeout(() => m.textContent = '', 2000);
       loadAdmin();
       loadFreeSpots();
+
+    function syncSbpFieldsVisibility() {
+      const sel = document.getElementById('pay-provider');
+      const wrap = document.getElementById('sbp-fields-wrap');
+      if (!sel || !wrap) return;
+      const v = (sel.value || '').toLowerCase();
+      wrap.style.display = (v === '' || v === 'none' || v === 'sbp' || v === 'manual') ? 'grid' : 'none';
+    }
+    document.getElementById('pay-provider')?.addEventListener('change', syncSbpFieldsVisibility);
+    setTimeout(syncSbpFieldsVisibility, 300);
+
     }
 
     async function createPromo() {
@@ -2034,6 +2102,7 @@
     loadTariffs();
     loadFreeSpots();
     xsvcLoadPublic();
+      document.addEventListener('DOMContentLoaded', loadFreeSpots);
   </script>
 </body>
 </html>
