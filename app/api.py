@@ -15,17 +15,20 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.database import init_db, async_session, User, SmsQueue, Tariff, Order, PromoCode, RtuSlot, ExtraService, ServiceOrder
+from app.database import (
+    init_db, async_session, User, SmsQueue, Tariff, Order, PromoCode, RtuSlot, ExtraService, ServiceOrder
+)
 from app.services import (
-    normalize_phone, register_user_and_car, create_order, confirm_order, reject_order,
+    normalize_phone, normalize_plate, register_user_and_car, create_order, confirm_order, reject_order,
     grant_access_days, revoke_access, get_next_sms_task, report_sms_task,
-    validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings, get_payment_settings, set_payment_settings, mark_order_paid_by_user,
-    process_expired_slots, pop_expiring_slots, queue_open_gate, get_finance_stats, assign_spot_to_user, backfill_spots,
-    list_extra_services, create_service_order, mark_service_order_paid
+    validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings,
+    get_payment_settings, set_payment_settings, mark_order_paid_by_user,
+    process_expired_slots, pop_expiring_slots, queue_open_gate, get_finance_stats,
+    set_user_spot, create_service_order, get_spots_availability
 )
 from app.bot import (
     bot, dp, notify_admins_order, notify_user_activated,
-    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users, notify_admins_support, notify_admins_service_order
+    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users, notify_admins_support
 )
 
 logger = logging.getLogger("uvicorn")
@@ -53,7 +56,6 @@ async def scheduler_loop():
     while True:
         try:
             async with async_session() as session:
-                await backfill_spots(session)
                 expired_count = await process_expired_slots(session)
                 if expired_count:
                     logger.info(f"Автоудаление: {expired_count} просроченных ячеек.")
@@ -67,7 +69,6 @@ async def scheduler_loop():
                 worker_state["alert_sent"] = True
                 await notify_admins_text("Внимание! Модем RX100-R4 не выходит на связь более 2 минут.")
 
-            # Автобэкап БД раз в сутки в 03:00
             now = datetime.now()
             today_str = now.strftime("%Y-%m-%d")
             if now.hour == 3 and worker_state["last_backup_day"] != today_str:
@@ -101,7 +102,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def verify_worker(authorization: str = Header(None)):
-    if authorization != f"Bearer {settings.WORKER_API_TOKEN}":
+    if not authorization or not secrets.compare_digest(authorization, f"Bearer {settings.WORKER_API_TOKEN}"):
         raise HTTPException(status_code=401, detail="Invalid worker token")
 
 
@@ -153,6 +154,7 @@ class SettingsReq(BaseModel):
     sbp_recipient: str
     gate_phone: str
     bot_username: str = ""
+    max_spots: int = 200
 
 
 class TariffCreateReq(BaseModel):
@@ -192,6 +194,24 @@ class RevokeReq(BaseModel):
     user_id: int
 
 
+class SpotUpdateReq(BaseModel):
+    spot: str = ""
+
+
+class ExtraServiceReq(BaseModel):
+    name: str
+    price: int
+    description: str = ""
+    is_active: bool = True
+
+
+class ServiceOrderReq(BaseModel):
+    service_id: int
+    phone: str
+    spot: str = ""
+    comment: str = ""
+
+
 class BroadcastReq(BaseModel):
     text: str
 
@@ -220,6 +240,7 @@ async def admin_page():
 async def manifest():
     return FileResponse("static/manifest.json")
 
+
 @app.get("/api/qr")
 async def api_qr(data: str):
     buf = io.BytesIO()
@@ -230,7 +251,9 @@ async def api_qr(data: str):
 @app.get("/api/settings")
 async def api_public_settings():
     async with async_session() as session:
-        return await get_app_settings(session)
+        cfg = await get_app_settings(session)
+        avail = await get_spots_availability(session)
+        return {**cfg, "free_spots": avail["free_spots"], "used_spots": avail["used_spots"]}
 
 
 @app.get("/api/gate-contact.vcf")
@@ -282,10 +305,16 @@ async def api_register(data: RegisterReq):
             car_model=data.car_model,
             full_name=data.full_name,
         )
-        norm_pl = data.plate_number.replace(" ", "").upper()
+        norm_pl = normalize_plate(data.plate_number)
         matched_veh = next((v for v in user.vehicles if v.plate_number == norm_pl), user.vehicles[-1] if user.vehicles else None)
         try:
-            order = await create_order(session, user.id, data.tariff_id, data.promo_code, vehicle_id=matched_veh.id if matched_veh else None)
+            order = await create_order(
+                session,
+                user.id,
+                data.tariff_id,
+                data.promo_code,
+                vehicle_id=matched_veh.id if matched_veh else None,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         cfg = await get_app_settings(session)
@@ -329,7 +358,14 @@ async def api_status(phone: str):
             "phone": user.phone,
             "full_name": user.full_name,
             "gate_phone": cfg["gate_phone"],
-            "vehicles": [{"plate": v.plate_number, "model": v.car_model, "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None} for v in user.vehicles],
+            "vehicles": [
+                {
+                    "plate": v.plate_number,
+                    "model": v.car_model,
+                    "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None,
+                }
+                for v in user.vehicles
+            ],
             "slot": {
                 "number": user.slot.slot_number,
                 "spot": user.slot.spot_label,
@@ -363,16 +399,66 @@ async def api_support(data: SupportReq):
     return {"ok": True}
 
 
+@app.get("/api/extra-services")
+async def api_extra_services():
+    async with async_session() as session:
+        res = await session.execute(select(ExtraService).where(ExtraService.is_active == True).order_by(ExtraService.id))
+        return [{"id": x.id, "name": x.name, "price": x.price, "description": x.description or ""} for x in res.scalars().all()]
+
+
+@app.post("/api/extra-services/order")
+async def api_create_service_order(data: ServiceOrderReq):
+    async with async_session() as session:
+        try:
+            order = await create_service_order(session, data.service_id, data.phone, data.spot, data.comment)
+            cfg = await get_app_settings(session)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "order_id": order.id, "amount": order.amount, "payment": cfg}
+
+
+@app.post("/api/extra-services/orders/{order_id}/paid")
+async def api_service_order_paid(order_id: int):
+    async with async_session() as session:
+        res = await session.execute(
+            select(ServiceOrder)
+            .options(selectinload(ServiceOrder.service))
+            .where(ServiceOrder.id == order_id)
+        )
+        order = res.scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="Заказ не найден")
+        if order.status == "pending":
+            order.status = "paid_by_user"
+            await session.commit()
+        svc_name = order.service.name if order.service else f"Услуга #{order.service_id}"
+        phone = order.phone
+        spot = order.spot or "—"
+        comment = order.comment or "—"
+        amount = order.amount
+
+    await notify_admins_text(
+        f"Оплата доп. услуги · Заказ #{order_id}\n"
+        f"Услуга: {svc_name} ({amount} ₽)\n"
+        f"Телефон: +{phone}\n"
+        f"Место: {spot}\n"
+        f"Комментарий: {comment}"
+    )
+    return {"ok": True}
+
+
+# --- Админка ---
 @app.get("/api/admin/stats", dependencies=[Depends(verify_admin)])
 async def admin_stats():
     async with async_session() as session:
-        used = (await session.execute(select(func.count(RtuSlot.slot_number)).where(RtuSlot.status != "free"))).scalar() or 0
+        avail = await get_spots_availability(session)
         fin = await get_finance_stats(session)
     lp = worker_state["last_ping"]
     online = lp is not None and (time.time() - lp) <= 120
     return {
-        "slots_used": used,
-        "slots_total": 200,
+        "slots_used": avail["used_spots"],
+        "slots_total": avail["max_spots"],
+        "free_spots": avail["free_spots"],
         "worker_online": online,
         "last_incoming_sms": worker_state["last_incoming_sms"],
         "finance": fin,
@@ -407,12 +493,13 @@ async def admin_export_users():
         users = res.scalars().all()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["ID", "Телефон", "Имя", "Машины", "Ячейка", "Статус", "Действует до"])
+    w.writerow(["ID", "Телефон", "Имя", "Машины", "Ячейка", "Место", "Статус", "Действует до"])
     for u in users:
         cars = ", ".join([v.plate_number for v in u.vehicles])
         w.writerow([
             u.id, f"+{u.phone}", u.full_name or "", cars,
             u.slot.slot_number if u.slot else "",
+            u.slot.spot_label if (u.slot and u.slot.spot_label) else "",
             u.slot.status if u.slot else "",
             u.slot.valid_until.strftime("%d.%m.%Y %H:%M") if (u.slot and u.slot.valid_until) else "",
         ])
@@ -435,7 +522,9 @@ async def admin_set_payment_settings(data: PaymentSettingsReq):
 @app.put("/api/admin/settings", dependencies=[Depends(verify_admin)])
 async def admin_set_settings(data: SettingsReq):
     async with async_session() as session:
-        await set_app_settings(session, data.model_dump())
+        payload = data.model_dump()
+        payload["max_spots"] = max(0, int(payload.get("max_spots", 200)))
+        await set_app_settings(session, payload)
         return {"ok": True}
 
 
@@ -527,7 +616,12 @@ async def admin_create_promo(data: PromoReq):
         existing = await session.execute(select(PromoCode).where(PromoCode.code == code))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Такой промокод уже существует")
-        promo = PromoCode(code=code, discount_percent=data.discount_percent, valid_until=parse_date_end(data.valid_until), target_audience=data.target_audience or "all", tariff_ids=",".join(str(x) for x in data.tariff_ids))
+        promo = PromoCode(
+            code=code, discount_percent=data.discount_percent,
+            valid_until=parse_date_end(data.valid_until),
+            target_audience=data.target_audience or "all",
+            tariff_ids=",".join(str(x) for x in data.tariff_ids),
+        )
         session.add(promo)
         await session.commit()
         return {"ok": True, "id": promo.id}
@@ -613,7 +707,14 @@ async def admin_users():
         return [
             {
                 "id": u.id, "phone": u.phone, "full_name": u.full_name,
-                "vehicles": [{"plate": v.plate_number, "model": v.car_model, "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None} for v in u.vehicles],
+                "vehicles": [
+                    {
+                        "plate": v.plate_number,
+                        "model": v.car_model,
+                        "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None,
+                    }
+                    for v in u.vehicles
+                ],
                 "slot": {
                     "number": u.slot.slot_number,
                     "spot": u.slot.spot_label,
@@ -625,29 +726,22 @@ async def admin_users():
         ]
 
 
+@app.put("/api/admin/users/{user_id}/spot", dependencies=[Depends(verify_admin)])
+async def admin_set_user_spot(user_id: int, data: SpotUpdateReq):
+    async with async_session() as session:
+        try:
+            slot = await set_user_spot(session, user_id, data.spot)
+            return {"ok": True, "spot": slot.spot_label}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/admin/grant", dependencies=[Depends(verify_admin)])
 async def admin_grant(data: GrantReq):
     async with async_session() as session:
         try:
             slot = await grant_access_days(session, data.user_id, data.days)
             return {"ok": True, "slot_number": slot.slot_number}
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-
-
-
-class SetSpotReq(BaseModel):
-    user_id: int
-    spot: str
-
-
-@app.post("/api/admin/set-spot", dependencies=[Depends(verify_admin)])
-async def admin_set_spot(data: SetSpotReq):
-    async with async_session() as session:
-        try:
-            slot = await assign_spot_to_user(session, data.user_id, data.spot)
-            return {"ok": True, "slot_number": slot.slot_number, "spot": slot.spot_label}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -662,138 +756,11 @@ async def admin_revoke(data: RevokeReq):
             raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/admin/queue", dependencies=[Depends(verify_admin)])
-async def admin_queue():
-    async with async_session() as session:
-        res = await session.execute(select(SmsQueue).order_by(SmsQueue.id.desc()).limit(30))
-        return [
-            {
-                "id": q.id, "slot": q.slot_number, "action": q.action,
-                "command": q.command_text, "status": q.status,
-                "error": q.error_msg, "created_at": q.created_at.strftime("%H:%M:%S"),
-            }
-            for q in res.scalars().all()
-        ]
-
-
-@app.get("/api/internal/sms/next", dependencies=[Depends(verify_worker)])
-async def worker_next():
-    was_alert = worker_state["alert_sent"]
-    worker_state["last_ping"] = time.time()
-    worker_state["alert_sent"] = False
-    if was_alert:
-        await notify_admins_text("Модем RX100-R4 снова в сети.")
-
-    async with async_session() as session:
-        task = await get_next_sms_task(session)
-        if not task:
-            return None
-        return {"id": task.id, "command_text": task.command_text}
-
-
-@app.post("/api/internal/sms/{task_id}/report", dependencies=[Depends(verify_worker)])
-async def worker_report(task_id: int, data: SmsReportReq):
-    async with async_session() as session:
-        await report_sms_task(session, task_id, data.status, data.error_msg)
-        return {"ok": True}
-
-
-
-
-class ExtraServiceReq(BaseModel):
-    name: str
-    price: int
-    description: str = ""
-    is_active: bool = True
-
-
-class ServiceOrderReq(BaseModel):
-    service_id: int
-    phone: str
-    spot: str
-    comment: str = ""
-
-
-@app.get("/api/extra-services")
-async def api_extra_services():
-    async with async_session() as session:
-        items = await list_extra_services(session, only_active=True)
-        return [
-            {"id": s.id, "name": s.name, "price": s.price, "description": s.description or ""}
-            for s in items
-        ]
-
-
-@app.post("/api/extra-services/order")
-async def api_create_service_order(data: ServiceOrderReq):
-    async with async_session() as session:
-        try:
-            order = await create_service_order(
-                session,
-                service_id=data.service_id,
-                phone=data.phone,
-                spot=data.spot,
-                comment=data.comment,
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        cfg = await get_app_settings(session)
-        return {
-            "ok": True,
-            "order_id": order.id,
-            "service_name": order.service.name,
-            "amount": order.amount,
-            "phone": order.phone,
-            "spot": order.spot,
-            "comment": order.comment,
-            "payment": cfg,
-        }
-
-
-@app.post("/api/extra-services/orders/{order_id}/paid")
-async def api_service_order_paid(order_id: int):
-    async with async_session() as session:
-        res = await session.execute(
-            select(ServiceOrder)
-            .options(selectinload(ServiceOrder.service))
-            .where(ServiceOrder.id == order_id)
-        )
-        order = res.scalar_one_or_none()
-        if not order:
-            raise HTTPException(status_code=404, detail="Заказ не найден")
-        if order.status == "pending":
-            order.status = "paid_by_user"
-            await session.commit()
-        svc_name = order.service.name if order.service else f"Услуга #{order.service_id}"
-        phone = order.phone
-        spot = order.spot or "—"
-        comment = order.comment or "—"
-        amount = order.amount
-
-    await notify_admins_text(
-        f"Оплата доп. услуги · Заказ #{order_id}\n"
-        f"Услуга: {svc_name} ({amount} ₽)\n"
-        f"Телефон: +{phone}\n"
-        f"Место: {spot}\n"
-        f"Комментарий: {comment}"
-    )
-    return {"ok": True}
-
-
 @app.get("/api/admin/extra-services", dependencies=[Depends(verify_admin)])
-async def admin_extra_services():
+async def admin_get_extra_services():
     async with async_session() as session:
-        items = await list_extra_services(session, only_active=False)
-        return [
-            {
-                "id": s.id,
-                "name": s.name,
-                "price": s.price,
-                "description": s.description or "",
-                "is_active": s.is_active,
-            }
-            for s in items
-        ]
+        res = await session.execute(select(ExtraService).order_by(ExtraService.id))
+        return [{"id": x.id, "name": x.name, "price": x.price, "description": x.description or "", "is_active": x.is_active} for x in res.scalars().all()]
 
 
 @app.post("/api/admin/extra-services", dependencies=[Depends(verify_admin)])
@@ -801,15 +768,10 @@ async def admin_create_extra_service(data: ExtraServiceReq):
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="Укажите название услуги")
     async with async_session() as session:
-        s = ExtraService(
-            name=data.name.strip(),
-            price=max(0, int(data.price)),
-            description=(data.description or "").strip(),
-            is_active=bool(data.is_active),
-        )
-        session.add(s)
+        svc = ExtraService(name=data.name.strip(), price=max(0, data.price), description=data.description.strip(), is_active=data.is_active)
+        session.add(svc)
         await session.commit()
-        return {"ok": True, "id": s.id}
+        return {"ok": True, "id": svc.id}
 
 
 @app.put("/api/admin/extra-services/{service_id}", dependencies=[Depends(verify_admin)])
@@ -817,13 +779,13 @@ async def admin_update_extra_service(service_id: int, data: ExtraServiceReq):
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="Укажите название услуги")
     async with async_session() as session:
-        s = await session.get(ExtraService, service_id)
-        if not s:
+        svc = await session.get(ExtraService, service_id)
+        if not svc:
             raise HTTPException(status_code=404, detail="Услуга не найдена")
-        s.name = data.name.strip()
-        s.price = max(0, int(data.price))
-        s.description = (data.description or "").strip()
-        s.is_active = bool(data.is_active)
+        svc.name = data.name.strip()
+        svc.price = max(0, data.price)
+        svc.description = data.description.strip()
+        svc.is_active = data.is_active
         await session.commit()
         return {"ok": True}
 
@@ -831,40 +793,11 @@ async def admin_update_extra_service(service_id: int, data: ExtraServiceReq):
 @app.delete("/api/admin/extra-services/{service_id}", dependencies=[Depends(verify_admin)])
 async def admin_delete_extra_service(service_id: int):
     async with async_session() as session:
-        s = await session.get(ExtraService, service_id)
-        if s:
-            used = (await session.execute(select(func.count(ServiceOrder.id)).where(ServiceOrder.service_id == service_id))).scalar() or 0
-            if used > 0:
-                s.is_active = False
-            else:
-                await session.delete(s)
+        svc = await session.get(ExtraService, service_id)
+        if svc:
+            await session.delete(svc)
             await session.commit()
         return {"ok": True}
-
-
-@app.post("/api/internal/sms/incoming", dependencies=[Depends(verify_worker)])
-async def worker_incoming(data: IncomingSmsReq):
-    msg = f"{datetime.now().strftime('%H:%M')} от {data.sender}: {data.text}"
-    worker_state["last_incoming_sms"] = msg
-    logger.info(f"Входящая SMS на RX100-R4: {msg}")
-    return {"ok": True}
-
-
-
-class SpotUpdateReq(BaseModel):
-    spot: str = ""
-
-
-@app.put("/api/admin/users/{user_id}/spot", dependencies=[Depends(verify_admin)])
-async def admin_set_user_spot(user_id: int, data: SpotUpdateReq):
-    async with async_session() as session:
-        res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == user_id))
-        slot = res.scalar_one_or_none()
-        if not slot:
-            raise HTTPException(status_code=400, detail="У пользователя нет активной ячейки")
-        slot.spot_label = data.spot.strip() or None
-        await session.commit()
-        return {"ok": True, "spot": slot.spot_label}
 
 
 @app.get("/api/admin/service-orders", dependencies=[Depends(verify_admin)])
@@ -911,3 +844,47 @@ async def admin_reject_service_order(order_id: int):
         o.status = "rejected"
         await session.commit()
         return {"ok": True}
+
+
+@app.get("/api/admin/queue", dependencies=[Depends(verify_admin)])
+async def admin_queue():
+    async with async_session() as session:
+        res = await session.execute(select(SmsQueue).order_by(SmsQueue.id.desc()).limit(30))
+        return [
+            {
+                "id": q.id, "slot": q.slot_number, "action": q.action,
+                "command": q.command_text, "status": q.status,
+                "error": q.error_msg, "created_at": q.created_at.strftime("%H:%M:%S"),
+            }
+            for q in res.scalars().all()
+        ]
+
+
+@app.get("/api/internal/sms/next", dependencies=[Depends(verify_worker)])
+async def worker_next():
+    was_alert = worker_state["alert_sent"]
+    worker_state["last_ping"] = time.time()
+    worker_state["alert_sent"] = False
+    if was_alert:
+        await notify_admins_text("Модем RX100-R4 снова в сети.")
+
+    async with async_session() as session:
+        task = await get_next_sms_task(session)
+        if not task:
+            return None
+        return {"id": task.id, "command_text": task.command_text}
+
+
+@app.post("/api/internal/sms/{task_id}/report", dependencies=[Depends(verify_worker)])
+async def worker_report(task_id: int, data: SmsReportReq):
+    async with async_session() as session:
+        await report_sms_task(session, task_id, data.status, data.error_msg)
+        return {"ok": True}
+
+
+@app.post("/api/internal/sms/incoming", dependencies=[Depends(verify_worker)])
+async def worker_incoming(data: IncomingSmsReq):
+    msg = f"{datetime.now().strftime('%H:%M')} от {data.sender}: {data.text}"
+    worker_state["last_incoming_sms"] = msg
+    logger.info(f"Входящая SMS на RX100-R4: {msg}")
+    return {"ok": True}
