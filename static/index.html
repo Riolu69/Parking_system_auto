@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Парковка" />
@@ -288,6 +288,25 @@
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px); z-index: 50; display: flex; align-items: center; justify-content: center;
       padding: 16px; animation: fadeIn 0.2s var(--ease);
+    }
+    .agree-box {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin: 10px 0 6px; font-size: 12px; color: var(--muted); line-height: 1.4;
+    }
+    .agree-box input[type="checkbox"] {
+      width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; cursor: pointer;
+      padding: 0 !important; background: transparent !important; border: none !important;
+      box-shadow: none !important; appearance: auto; -webkit-appearance: checkbox;
+      accent-color: var(--accent);
+    }
+    .agree-link {
+      color: var(--accent); font-weight: 600; text-decoration: underline; cursor: pointer;
+      background: none; border: none; padding: 0; font: inherit;
+    }
+    .modal-card.wide { max-width: 640px; max-height: 85vh; display: flex; flex-direction: column; }
+    .contract-body {
+      overflow-y: auto; padding-right: 6px; font-size: 13px; line-height: 1.55;
+      color: var(--text); white-space: pre-line;
     }
     .modal-card {
       background: var(--card); border: 1px solid var(--border); border-radius: 26px;
@@ -678,6 +697,24 @@
       .hero-pro-desc { flex-direction: column; gap: 8px; }
     }
 
+
+    /* Фиксация ширины без растягивания контейнера на ПК */
+    html, body { overflow-x: hidden; }
+    .wrap { max-width: 1200px !important; width: 100%; }
+    .grid-2, .card { min-width: 0; }
+    #xsvc-order-panel, #xsvc-order-panel .field { max-width: 100%; min-width: 0; }
+    #xsvc-order-panel .b-trigger.full {
+      width: 100%; max-width: 100%;
+      white-space: normal; text-align: left; line-height: 1.35;
+    }
+    #xsvc-order-panel .b-trigger.full span {
+      min-width: 0; overflow-wrap: anywhere; word-break: break-word;
+    }
+    @media (max-width: 820px) {
+      input, textarea, select { font-size: 16px !important; }
+      .b-popover { max-width: calc(100vw - 24px) !important; }
+      .b-opt { white-space: normal; }
+    }
   </style>
 </head>
 <body>
@@ -744,6 +781,19 @@
             <label>Тариф</label>
             <div id="tariff-list" class="tariff-grid"></div>
           </div>
+          <div class="agree-box">
+            <input id="reg-agree" type="checkbox" onclick="handleAgreementCheckboxClick(event)" />
+            <span>
+              Я принимаю условия
+              <button type="button" class="agree-link" onclick="openContractModal()">договора аренды / публичной оферты</button>
+            </span>
+          </div>
+          <label class="agree-box" style="margin-top:6px;">
+            <input id="reg-pd-agree" type="checkbox" />
+            <span>
+              Я даю согласие на обработку персональных данных в соответствии с 152-ФЗ для оформления доступа к парковке.
+            </span>
+          </label>
           <button class="btn btn-primary" onclick="registerAndPay()">Перейти к оплате</button>
           <div id="reg-msg" class="msg"></div>
           <div id="pay-box" class="pay-sheet hidden"></div>
@@ -853,6 +903,16 @@
         </div>
 
         <div class="card no-print">
+          <div class="card-head"><h2>Очередь проверки выезда / Просрочки</h2></div>
+          <div class="table-wrap xsvc-table-scroll">
+            <table>
+              <thead><tr><th>Телефон / Авто</th><th>Место</th><th>Истёк срок</th><th>Статус / Долг</th><th>Действия</th></tr></thead>
+              <tbody id="overstay-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card no-print">
           <div class="card-head"><h2>Заказанные доп. услуги</h2></div>
           <div class="table-wrap xsvc-table-scroll">
             <table>
@@ -879,16 +939,28 @@
             </div>
           </div>
 
-          <div style="margin-bottom:14px;padding-top:12px;border-top:1px solid var(--border);">
-            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;">
-              <input id="set-desc-enabled" type="checkbox" style="width:auto;" />
-              Показывать блок «Описание» на главной
-            </label>
-            <textarea id="set-desc-text" rows="4" placeholder="Преимущества нашей парковки" style="width:100%;resize:vertical;"></textarea>
+          <div id="extra-doc-settings" class="hidden" style="margin-bottom:14px;padding:16px;border-radius:18px;background:var(--card-elev);border:1px solid var(--border);">
+            <div style="margin-bottom:14px;">
+              <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;">
+                <input id="set-desc-enabled" type="checkbox" style="width:auto;" />
+                Показывать блок «Описание» на главной
+              </label>
+              <textarea id="set-desc-text" rows="4" placeholder="Преимущества нашей парковки" style="width:100%;resize:vertical;"></textarea>
+            </div>
+            <div style="padding-top:14px;border-top:1px solid var(--border);">
+              <label for="set-contract-text" style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">Текст договора аренды / публичной оферты</label>
+              <textarea id="set-contract-text" rows="7" placeholder="Текст оферты..." style="width:100%;resize:vertical;"></textarea>
+            </div>
           </div>
 
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-acc" onclick="saveSettings()">Сохранить настройки</button>
+          <div style="margin-bottom:14px;">
+            <label for="set-bot-admin-ids" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Администраторы бота (Telegram ID через запятую)</label>
+            <input id="set-bot-admin-ids" placeholder="Например: 123456789, 987654321" style="width:100%;" />
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleExtraDocSettings(); this.blur();">Описание и оферта</button>
+            <button type="button" class="btn btn-sm btn-acc" onclick="saveSettings(); this.blur();">Сохранить настройки</button>
             <div id="pay-set-msg" class="msg ok" style="margin:0;"></div>
           </div>
         </div>
@@ -1088,7 +1160,7 @@
         <button class="btn btn-sm btn-secondary" onclick="closeHelpModal()">×</button>
       </div>
       <div class="field">
-        <label>Ваш телефон (если открыли не через Telegram)</label>
+        <label>Ваш телефон</label>
         <input id="help-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67" oninput="formatPhoneInput(this)" />
       </div>
       <div class="field">
@@ -1153,6 +1225,8 @@
         }
         const descCard = document.getElementById('parking-desc-card');
         const descText = document.getElementById('parking-desc-text');
+        const cEl = document.getElementById('contract-text');
+        if (cEl && (d.contract_text || '').trim()) cEl.textContent = d.contract_text;
         if (descCard && descText) {
           if (d.description_enabled && (d.description_text || '').trim()) {
             descText.textContent = d.description_text;
@@ -1167,7 +1241,6 @@
     async function loadTariffs() {
       const r = await fetch('/api/tariffs');
       tariffs = await r.json();
-      if (tariffs.length && !selectedTariffId) selectedTariffId = tariffs[0].id;
       renderClientTariffs();
     }
 
@@ -1233,6 +1306,18 @@
     }
 
     async function registerAndPay() {
+      if (!document.getElementById('reg-agree').checked) {
+        const errEl = document.getElementById('reg-msg');
+        errEl.textContent = 'Прочитайте и примите условия договора перед оплатой.';
+        errEl.className = 'msg err';
+        return;
+      }
+      if (!document.getElementById('reg-pd-agree').checked) {
+        const errEl = document.getElementById('reg-msg');
+        errEl.textContent = 'Подтвердите согласие на обработку персональных данных.';
+        errEl.className = 'msg err';
+        return;
+      }
       const msg = document.getElementById('reg-msg');
       const payBox = document.getElementById('pay-box');
       const promoInp = document.getElementById('reg-promo');
@@ -1246,6 +1331,11 @@
       };
       if (!body.phone || !body.plate_number) {
         msg.textContent = 'Укажите телефон и госномер автомобиля.';
+        msg.className = 'msg err';
+        return;
+      }
+      if (!body.tariff_id) {
+        msg.textContent = 'Выберите тариф.';
         msg.className = 'msg err';
         return;
       }
@@ -1311,7 +1401,7 @@
         pending_del: 'Отключается',
         free: 'Не активен'
       };
-      const cars = (d.vehicles || []).map(v => `<b>${v.plate}</b>${v.model ? ' · ' + v.model : ''} <span style="color:var(--muted)">${v.valid_until ? '— до ' + v.valid_until : '— не оплачена'}</span>`).join('<br>') || '—';
+      const cars = (d.vehicles || []).map(v => `<b>${v.plate}</b>${v.model ? ' · ' + v.model : ''}${v.spot ? ` <span class="adm-spot-tag">Место ${v.spot}</span>` : ''} <span style="color:var(--muted)">${v.valid_until ? '— до ' + v.valid_until : '— не оплачена'}${v.debt_amount > 0 ? ` <span class="pill st-error">Долг: ${v.debt_days} дн. (${v.debt_amount} ₽)</span>` : ''}</span>`).join('<br>') || '—';
       const gateBtns = (d.slot && d.slot.status === 'active' && d.gate_phone)
         ? `<div class="pay-actions" style="margin-top:10px;">
              <a class="btn btn-sm btn-ok" href="tel:${d.gate_phone}">Позвонить на парковку</a>
@@ -1321,9 +1411,7 @@
       let slotHtml = '<div style="color:var(--muted)">Доступ не оформлен</div>';
       if (d.slot) {
         const stLabel = stHumanMap[d.slot.status] || d.slot.status;
-        const spotVal = d.slot.spot || d.slot.number || '';
         slotHtml = `
-          ${spotVal ? `<div style="margin-bottom:4px;">Парковочное место: ${spotVal}</div>` : ''}
           <div style="margin-bottom:4px;">Статус: ${stLabel}</div>
           <div style="color:var(--muted)">Действует до: ${d.slot.valid_until || '—'}</div>
           ${gateBtns}
@@ -1340,6 +1428,34 @@
 
     function getAdminPass() { return document.getElementById('adm-pass').value || localStorage.getItem('adm_pass') || ''; }
 
+        
+    async function admGrantVehicle(vid, days) {
+      const r = await fetch(`/api/admin/vehicles/${vid}/grant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...adminHeaders() },
+        body: JSON.stringify({ days })
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.detail || "Ошибка продления");
+        return;
+      }
+      await loadAdmin();
+    }
+    async function admRevokeVehicle(vid, plate) {
+      if (!confirm(`Сбросить оплату для авто ${plate}?`)) return;
+      const r = await fetch(`/api/admin/vehicles/${vid}/revoke`, {
+        method: "POST",
+        headers: adminHeaders()
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.detail || "Ошибка сброса");
+        return;
+      }
+      await loadAdmin();
+    }
+
         function renderUsers() {
       const q = (document.getElementById('user-search').value || '').trim().toLowerCase();
       const filtered = allUsers.filter(u =>
@@ -1353,19 +1469,16 @@
         free: 'Не активен'
       };
       document.getElementById('users-body').innerHTML = filtered.map(u => {
-        const cars = (u.vehicles || []).map(v => `<div><b>${v.plate}</b> <span class="adm-meta">${v.valid_until ? 'до ' + v.valid_until : 'не оплачена'}</span></div>`).join('') || '—';
+        const cars = (u.vehicles || []).map(v => `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px;"><b>${v.plate}</b> ${v.spot ? `<span class="adm-spot-tag" style="cursor:pointer;" title="Изменить место" onclick="xsvcSetVehicleSpot(${v.id}, '${v.spot}')">Место ${v.spot}</span>` : `<button class="adm-btn adm-btn-spot" style="height:20px;padding:0 6px;font-size:11px;" onclick="xsvcSetVehicleSpot(${v.id}, '')">+ место</button>`} <span class="adm-meta">${v.valid_until ? 'до ' + v.valid_until : 'не оплачена'}</span> <span style="display:inline-flex;gap:3px;margin-left:auto;"><button class="adm-btn" style="height:20px;padding:0 5px;font-size:11px;" title="Продлить на 1 день" onclick="admGrantVehicle(${v.id}, 1)">+1д</button><button class="adm-btn adm-btn-ok" style="height:20px;padding:0 5px;font-size:11px;" title="Продлить на 30 дней" onclick="admGrantVehicle(${v.id}, 30)">+30д</button><button class="adm-btn adm-btn-del" style="height:20px;padding:0 6px;font-size:11px;" title="Сбросить оплату авто" onclick="admRevokeVehicle(${v.id}, '${v.plate}')">×</button></span></div>`).join('') || '—';
         let slotHtml = '<span class="adm-meta">Нет доступа</span>';
         if (u.slot) {
           const stLabel = stMap[u.slot.status] || u.slot.status;
-          const spotTag = u.slot.spot ? `<span class="adm-spot-tag">Место ${u.slot.spot}</span>` : '';
           slotHtml = `
-            <div><span class="pill st-${u.slot.status}">${stLabel}</span>${spotTag}</div>
+            <div><span class="pill st-${u.slot.status}">${stLabel}</span></div>
             <div class="adm-meta">#${u.slot.number} · до ${u.slot.valid_until || '—'}</div>
           `;
         }
-        const spotBtn = u.slot
-          ? `<button class="adm-btn adm-btn-spot" onclick="if(window.xsvcSetSpot) xsvcSetSpot(${u.id}, '${u.slot.spot || ''}')">Место</button>`
-          : '';
+        const spotBtn = '';
         return `<tr>
           <td>${u.id}</td>
           <td><b>+${u.phone}</b></td>
@@ -1431,6 +1544,7 @@
 
       const cfg = await cfgRes.json();
       document.getElementById('set-sbp-phone').value = cfg.sbp_phone;
+      if (document.getElementById('set-bot-admin-ids')) { document.getElementById('set-bot-admin-ids').value = (cfg.bot_admin_ids || (cfg.admin_ids || []).join(', ') || ''); }
       document.getElementById('set-sbp-bank').value = cfg.sbp_bank;
       document.getElementById('set-sbp-rec').value = cfg.sbp_recipient;
       document.getElementById('set-gate-phone').value = cfg.gate_phone;
@@ -1438,6 +1552,7 @@
       document.getElementById('set-max-spots').value = cfg.max_spots ?? 200;
       document.getElementById('set-desc-enabled').checked = !!cfg.description_enabled;
       document.getElementById('set-desc-text').value = cfg.description_text || '';
+      document.getElementById('set-contract-text').value = cfg.contract_text || document.getElementById('contract-text').textContent;
       renderQrs(cfg.bot_username);
 
       const orders = await oRes.json();
@@ -1514,6 +1629,7 @@
 
       admLoadExtraServices();
       admLoadServiceOrders();
+      admLoadOverstay();
     }
 
     async function cancelSms(id) {
@@ -1578,6 +1694,7 @@
         headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
         body: JSON.stringify({
           sbp_phone: document.getElementById('set-sbp-phone').value,
+          bot_admin_ids: (document.getElementById('set-bot-admin-ids')?.value ?? null),
           sbp_bank: document.getElementById('set-sbp-bank').value,
           sbp_recipient: document.getElementById('set-sbp-rec').value,
           gate_phone: document.getElementById('set-gate-phone').value,
@@ -1585,6 +1702,7 @@
           max_spots: parseInt(document.getElementById('set-max-spots').value, 10) || 0,
           description_enabled: document.getElementById('set-desc-enabled').checked,
           description_text: document.getElementById('set-desc-text').value,
+          contract_text: document.getElementById('set-contract-text').value,
         }),
       });
       const m = document.getElementById('pay-set-msg');
@@ -2133,6 +2251,22 @@
       }
     }
 
+    async function xsvcSetVehicleSpot(vehicleId, currentSpot) {
+      const val = prompt('Введите номер парковочного места для этой машины (пусто — очистить):', currentSpot || '');
+      if (val === null) return;
+      const r = await fetch('/api/admin/vehicles/' + vehicleId + '/spot', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass() },
+        body: JSON.stringify({ spot: val.trim() })
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.detail || 'Ошибка сохранения места');
+        return;
+      }
+      loadAdmin();
+    }
+
     async function xsvcSetSpot(userId, currentSpot) {
       const val = prompt('Введите номер парковочного места (оставьте пустым чтобы очистить):', currentSpot || '');
       if (val === null) return;
@@ -2209,6 +2343,46 @@
     }
 
 
+    async function admLoadOverstay() {
+      const tbody = document.getElementById('overstay-body');
+      if (!tbody) return;
+      const r = await fetch('/api/admin/overstay', { headers: { 'X-Admin-Password': getAdminPass() } });
+      if (!r.ok) return;
+      const items = await r.json();
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">Просроченных машин в очереди нет</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map(x => {
+        const stHtml = x.status === 'debt'
+          ? `<span class="pill st-error">Долг: ${x.debt_days} дн. (${x.debt_amount} ₽)</span>`
+          : `<span class="pill st-pending">Ждёт проверки</span>`;
+        const stayBtn = x.status === 'check'
+          ? `<button class="adm-btn" style="background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.35);color:#fbbf24;" onclick="admOverstayAction(${x.vehicle_id}, 'stay')">Машина стоит</button>`
+          : '';
+        return `<tr>
+          <td><b>+${x.phone}</b><br><span class="adm-meta">${x.plate}</span></td>
+          <td>${x.spot}</td>
+          <td><span style="color:var(--muted)">${x.valid_until}</span></td>
+          <td>${stHtml}</td>
+          <td style="white-space:nowrap;">
+            <div class="adm-actions">
+              ${stayBtn}
+              <button class="adm-btn adm-btn-ok" onclick="admOverstayAction(${x.vehicle_id}, 'left')">Уехал</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function admOverstayAction(vehicleId, action) {
+      await fetch(`/api/admin/overstay/${vehicleId}/${action}`, {
+        method: 'POST',
+        headers: { 'X-Admin-Password': getAdminPass() }
+      });
+      loadAdmin();
+    }
+
     async function admLoadServiceOrders() {
       const tbody = document.getElementById('service-orders-body');
       if (!tbody) return;
@@ -2257,6 +2431,117 @@
     }
 
     
+    let contractUnlocked = false;
+    let contractTimerSec = 10;
+    let contractScrolledBottom = false;
+    let contractIntervalId = null;
+
+    function checkContractScrolledBottom() {
+      const el = document.getElementById('contract-text');
+      if (!el) return true;
+      if (el.scrollHeight <= el.clientHeight + 6) return true;
+      return el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+    }
+
+    function updateContractAcceptBtn() {
+      const btn = document.getElementById('contract-accept-btn');
+      const st = document.getElementById('contract-read-status');
+      if (!btn || !st) return;
+      contractScrolledBottom = contractScrolledBottom || checkContractScrolledBottom();
+      const canAccept = contractTimerSec <= 0 && contractScrolledBottom;
+      if (canAccept) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.textContent = 'Принять условия';
+        st.textContent = 'Договор прочитан — можно принять условия';
+        st.style.color = 'var(--ok)';
+      } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.45';
+        btn.style.cursor = 'not-allowed';
+        btn.textContent = contractTimerSec > 0 ? `Принять условия (${contractTimerSec}с)` : 'Пролистайте до конца';
+        if (!contractScrolledBottom && contractTimerSec <= 0) {
+          st.textContent = 'Пролистайте текст договора до самого конца';
+        } else if (contractScrolledBottom && contractTimerSec > 0) {
+          st.textContent = `Осталось подождать: ${contractTimerSec} сек`;
+        } else {
+          st.textContent = `Пролистайте до конца и подождите ${contractTimerSec} сек`;
+        }
+        st.style.color = 'var(--muted)';
+      }
+    }
+
+    function checkContractReadState() {
+      if (checkContractScrolledBottom()) contractScrolledBottom = true;
+      updateContractAcceptBtn();
+    }
+
+    function stopContractTimer() {
+      if (contractIntervalId) {
+        clearInterval(contractIntervalId);
+        contractIntervalId = null;
+      }
+    }
+
+    function openContractModal() {
+      const modal = document.getElementById('contract-modal');
+      const bodyEl = document.getElementById('contract-text');
+      modal.classList.remove('hidden');
+      if (bodyEl) bodyEl.scrollTop = 0;
+      stopContractTimer();
+      contractTimerSec = 10;
+      contractScrolledBottom = false;
+      updateContractAcceptBtn();
+      setTimeout(() => {
+        if (checkContractScrolledBottom()) {
+          contractScrolledBottom = true;
+          updateContractAcceptBtn();
+        }
+      }, 60);
+      contractIntervalId = setInterval(() => {
+        if (contractTimerSec > 0) {
+          contractTimerSec -= 1;
+          updateContractAcceptBtn();
+        }
+        if (contractTimerSec <= 0 && contractScrolledBottom) {
+          stopContractTimer();
+        }
+      }, 1000);
+    }
+
+    function closeContractModal() {
+      stopContractTimer();
+      document.getElementById('contract-modal').classList.add('hidden');
+    }
+
+    function handleAgreementCheckboxClick(ev) {
+      const cb = ev.target;
+      if (!contractUnlocked) {
+        ev.preventDefault();
+        cb.checked = false;
+        openContractModal();
+      }
+    }
+
+    function acceptContractAndClose() {
+      if (contractTimerSec > 0 || !checkContractScrolledBottom()) return;
+      contractUnlocked = true;
+      const cb = document.getElementById('reg-agree');
+      if (cb) cb.checked = true;
+      const hint = document.getElementById('agree-lock-hint');
+      if (hint) {
+        hint.textContent = 'Договор принят';
+        hint.style.color = 'var(--ok)';
+      }
+      closeContractModal();
+    }
+
+    function toggleExtraDocSettings() {
+      const box = document.getElementById('extra-doc-settings');
+      if (box) box.classList.toggle('hidden');
+    }
+
     function initRoute() {
       const isAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
       if (isAdmin) {
@@ -2277,6 +2562,35 @@
     xsvcLoadPublic();
       document.addEventListener('DOMContentLoaded', loadFreeSpots);
   </script>
+  <div id="contract-modal" class="modal-bg hidden" onclick="if(event.target===this) closeContractModal()">
+    <div class="modal-card wide">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:nowrap;gap:12px;">
+        <h2>Договор аренды (публичная оферта)</h2>
+        <button type="button" class="adm-btn adm-btn-del" style="margin-left:auto;flex-shrink:0;" title="Закрыть" onclick="closeContractModal()">×</button>
+      </div>
+      <div class="contract-body" id="contract-text" onscroll="checkContractReadState()">1. Общие положения
+Настоящий документ является публичной офертой и определяет порядок предоставления доступа на парковку и размещения транспортного средства (ТС) Пользователя на условиях выбранного тарифа.
+
+2. Предмет договора
+Исполнитель предоставляет Пользователю право проезда через шлагбаум (по номеру телефона) и размещения ТС на территории парковки в пределах оплаченного периода, а Пользователь обязуется оплатить услуги и соблюдать правила парковки.
+
+3. Порядок оформления и оплаты
+Оформление заявки производится через сайт или Telegram-бота с указанием номера телефона и государственного регистрационного знака ТС. Доступ активируется после подтверждения оплаты.
+
+4. Права и обязанности сторон
+Пользователю запрещается передавать доступ третьим лицам, блокировать проезд и нарушать правила внутреннего распорядка территории. При истечении оплаченного срока доступ может быть приостановлен автоматически.
+
+5. Персональные данные и реквизиты
+Отправляя данные при оформлении пропуска, Пользователь даёт согласие на их обработку для обеспечения работы сервиса и связи по вопросам обслуживания. Актуальные реквизиты получателя платежа отображаются на этапе оплаты.</div>
+      <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span id="contract-read-status" style="font-size:12px; color:var(--muted);">Пролистайте до конца и подождите 10 сек</span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="contract-accept-btn" class="btn btn-sm btn-ok" disabled style="opacity:0.45; cursor:not-allowed;" onclick="acceptContractAndClose()">Принять условия (10с)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
 

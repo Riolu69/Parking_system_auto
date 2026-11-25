@@ -7,7 +7,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
-    Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
+    Message, CallbackQuery, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, FSInputFile
 )
 from sqlalchemy import select, func
@@ -18,7 +18,7 @@ from app.database import async_session, User, Tariff, Order, RtuSlot
 from app.services import (
     register_user_and_car, create_order, validate_promo_code, parse_tariff_ids,
     get_app_settings, mark_order_paid_by_user, confirm_order, reject_order,
-    queue_open_gate, get_finance_stats
+    queue_open_gate, get_finance_stats, mark_vehicle_overstay
 )
 
 bot = Bot(token=settings.BOT_TOKEN, session=(AiohttpSession(proxy=settings.BOT_PROXY) if settings.BOT_PROXY else None))
@@ -69,7 +69,7 @@ def kb_main():
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
-async def kb_tariffs(discount: int = 0, promo_tariff_ids: list[int] | None = None) -> InlineKeyboardMarkup:
+async def kb_tariffs(discount: int = 0, promo_tariff_ids: list[int] | None = None, vehicle_id: int | None = None) -> InlineKeyboardMarkup:
     async with async_session() as session:
         res = await session.execute(select(Tariff).where(Tariff.is_active == True).order_by(Tariff.id))
         buttons = []
@@ -77,7 +77,7 @@ async def kb_tariffs(discount: int = 0, promo_tariff_ids: list[int] | None = Non
             d = discount if (discount and (not promo_tariff_ids or t.id in promo_tariff_ids)) else 0
             price = max(0, round(t.price * (100 - d) / 100))
             label = f"{t.name} — {price} ₽" if not d else f"{t.name} — {price} ₽ (-{d}%)"
-            buttons.append([InlineKeyboardButton(text=label, callback_data=f"tariff:{t.id}")])
+            buttons.append([InlineKeyboardButton(text=label, callback_data=(f"tariff:{t.id}:{vehicle_id}" if vehicle_id else f"tariff:{t.id}"))])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -180,18 +180,34 @@ async def cmd_start(message: Message, state: FSMContext):
 @dp.message(F.contact)
 async def handle_contact(message: Message, state: FSMContext):
     async with async_session() as session:
+        from app.database import Vehicle
+        from app.services import normalize_plate
         user = await register_user_and_car(
             session,
-            phone=message.contact.phone_number,
-            full_name=message.from_user.full_name,
+            phone=data["phone"],
+            plate_number=data["plate"],
+            car_model=model,
             telegram_id=message.from_user.id,
         )
-    if user.vehicles:
-        await message.answer("Номер привязан! Выберите тариф:", reply_markup=await kb_tariffs())
-    else:
-        await state.update_data(phone=user.phone)
-        await state.set_state(RegState.waiting_plate)
-        await message.answer("Номер сохранён. Введите госномер машины (например, А123ВС777):")
+        norm_pl = normalize_plate(data["plate"])
+        v_res = await session.execute(
+            select(Vehicle)
+            .where(Vehicle.user_id == user.id, Vehicle.plate_number == norm_pl)
+            .order_by(Vehicle.id.desc())
+            .limit(1)
+        )
+        added = v_res.scalar_one_or_none()
+    await state.update_data(pay_vehicle_id=added.id if added else None)
+    await state.set_state(None)
+    discount = data.get("promo_discount", 0)
+    plate_lbl = added.plate_number if added else data["plate"]
+    await message.answer("Машина добавлена!", reply_markup=kb_main())
+    await message.answer(
+        f"Авто: {plate_lbl}\nВыберите тариф для доступа к шлагбауму:",
+        reply_markup=await kb_tariffs(discount, vehicle_id=added.id if added else None),
+    )
+
+
 
 
 @dp.message(F.text == "Добавить машину")
@@ -204,34 +220,34 @@ async def add_car_start(message: Message, state: FSMContext):
         return
     await state.update_data(phone=user.phone)
     await state.set_state(RegState.waiting_plate)
-    await message.answer("Введите госномер машины:")
+    await message.answer("Введите госномер автомобиля (например, А123ВС77):", reply_markup=ReplyKeyboardRemove())
 
 
 @dp.message(RegState.waiting_plate)
-async def process_plate(message: Message, state: FSMContext):
-    txt = (message.text or "").strip()
-    if txt in MENU_BUTTONS or txt.startswith("/"):
+async def add_car_plate(message: Message, state: FSMContext):
+    plate = (message.text or "").strip().upper()
+    if not plate or plate in MENU_BUTTONS or plate.startswith("/"):
         await state.set_state(None)
-        await message.answer("Ввод госномера отменён.", reply_markup=kb_main())
+        await message.answer("Добавление автомобиля отменено.", reply_markup=kb_main())
         return
-    if len(txt) < 4 or len(txt) > 15:
-        await message.answer("Введите корректный госномер (например, А123ВС777):")
-        return
-    await state.update_data(plate=txt)
+    await state.update_data(plate=plate)
     await state.set_state(RegState.waiting_model)
-    await message.answer("Введите марку/модель авто (или «-» чтобы пропустить):")
+    kb_skip = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Пропустить")]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+    await message.answer("Введите марку и модель авто (или нажмите «Пропустить»):", reply_markup=kb_skip)
 
 
 @dp.message(RegState.waiting_model)
-async def process_model(message: Message, state: FSMContext):
+async def add_car_model(message: Message, state: FSMContext):
     txt = (message.text or "").strip()
-    if txt in MENU_BUTTONS or txt.startswith("/"):
-        await state.set_state(None)
-        await message.answer("Добавление машины отменено.", reply_markup=kb_main())
-        return
+    model = None if (not txt or txt.lower() == "пропустить") else txt
     data = await state.get_data()
-    model = None if txt == "-" else txt
     async with async_session() as session:
+        from app.database import Vehicle
+        from app.services import normalize_plate
         user = await register_user_and_car(
             session,
             phone=data["phone"],
@@ -239,12 +255,23 @@ async def process_model(message: Message, state: FSMContext):
             car_model=model,
             telegram_id=message.from_user.id,
         )
-    added = user.vehicles[-1] if user.vehicles else None
+        norm_pl = normalize_plate(data["plate"])
+        v_res = await session.execute(
+            select(Vehicle)
+            .where(Vehicle.user_id == user.id, Vehicle.plate_number == norm_pl)
+            .order_by(Vehicle.id.desc())
+            .limit(1)
+        )
+        added = v_res.scalar_one_or_none()
     await state.update_data(pay_vehicle_id=added.id if added else None)
     await state.set_state(None)
     discount = data.get("promo_discount", 0)
+    plate_lbl = added.plate_number if added else data["plate"]
     await message.answer("Машина добавлена!", reply_markup=kb_main())
-    await message.answer("Выберите тариф для доступа к шлагбауму:", reply_markup=await kb_tariffs(discount))
+    await message.answer(
+        f"Авто: {plate_lbl}\nВыберите тариф для доступа к шлагбауму:",
+        reply_markup=await kb_tariffs(discount, vehicle_id=added.id if added else None),
+    )
 
 
 @dp.message(F.text == "Ввести промокод")
@@ -296,15 +323,15 @@ async def choose_tariff(message: Message, state: FSMContext):
     if not user.vehicles:
         await message.answer("Сначала добавьте автомобиль.", reply_markup=kb_main())
         return
-    if len(user.vehicles) > 1:
+    if user.vehicles:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text=f"{v.plate_number}" + (f" (до {v.valid_until.strftime('%d.%m.%Y')})" if v.valid_until else ""),
                 callback_data=f"car_pay:{v.id}"
             )]
             for v in user.vehicles
-        ])
-        await message.answer("Выберите автомобиль для оплаты / продления:", reply_markup=kb)
+        ] + [[InlineKeyboardButton(text="+ Добавить другой авто", callback_data="car_add_new")]])
+        await message.answer("Выберите автомобиль или добавьте новый:", reply_markup=kb)
         return
 
     await state.update_data(pay_vehicle_id=user.vehicles[0].id)
@@ -314,6 +341,22 @@ async def choose_tariff(message: Message, state: FSMContext):
         f"Авто: {user.vehicles[0].plate_number}\nВыберите тариф:",
         reply_markup=await kb_tariffs(discount, data.get("promo_tariff_ids"))
     )
+
+
+
+
+@dp.callback_query(F.data == "car_add_new")
+async def on_car_add_new(callback: CallbackQuery, state: FSMContext):
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
+        user = res.scalar_one_or_none()
+    if not user:
+        await callback.answer("Сначала зарегистрируйтесь", show_alert=True)
+        return
+    await state.update_data(phone=user.phone)
+    await state.set_state(RegState.waiting_plate)
+    await callback.message.answer("Введите госномер автомобиля (например, А123ВС777):")
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("car_pay:"))
@@ -343,7 +386,9 @@ async def on_tariff_click(callback: CallbackQuery, state: FSMContext):
         if not user:
             await callback.answer("Сначала зарегистрируйтесь", show_alert=True)
             return
-        vid = data.get("pay_vehicle_id") or (user.vehicles[0].id if user.vehicles else None)
+        _parts = callback.data.split(":")
+        _cb_vid = int(_parts[2]) if len(_parts) >= 3 and _parts[2].isdigit() else None
+        vid = _cb_vid or data.get("pay_vehicle_id") or (user.vehicles[0].id if user.vehicles else None)
         try:
             order = await create_order(session, user.id, tariff_id, promo_code, vehicle_id=vid)
         except ValueError as e:
@@ -440,14 +485,14 @@ async def my_status(message: Message):
     cars = "\n".join([
         f"• {v.plate_number}"
         + (f" ({v.car_model})" if v.car_model else "")
+        + (f" [Место {v.spot_label}]" if v.spot_label else "")
         + (f" — до {v.valid_until.strftime('%d.%m.%Y %H:%M')}" if v.valid_until else " — не оплачена")
         for v in user.vehicles
     ]) or "нет"
     if user.slot:
         until = user.slot.valid_until.strftime("%d.%m.%Y %H:%M") if user.slot.valid_until else "—"
         st_human = STATUS_LABELS.get(user.slot.status, user.slot.status)
-        spot_line = f"Место: {user.slot.spot_label} | " if user.slot.spot_label else ""
-        slot_info = f"{spot_line}Статус: {st_human} | До: {until}\nНомер шлагбаума: {cfg['gate_phone']}"
+        slot_info = f"Статус: {st_human} | До: {until}\nНомер шлагбаума: {cfg['gate_phone']}"
     else:
         slot_info = "Доступ не активирован"
     await message.answer(f"Телефон: +{user.phone}\nМашины:\n{cars}\n\nШлагбаум: {slot_info}")
@@ -587,3 +632,58 @@ async def process_admin_reply(message: Message, state: FSMContext):
         await message.answer("Ответ отправлен пользователю.")
     except Exception as e:
         await message.answer(f"Не удалось отправить ответ: {e}")
+
+
+async def notify_admins_expired_vehicle(info: dict):
+    spot_txt = f" (Место {info['spot']})" if info.get("spot") else ""
+    text = (
+        f"Истёк срок парковки!\n"
+        f"Телефон: +{info['phone']}\n"
+        f"Авто: {info['plate']}{spot_txt}\n"
+        f"Оплачено до: {info['valid_until']}\n\n"
+        f"Проверьте, осталась ли машина на территории:"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Машина стоит (долг)", callback_data=f"ov_stay:{info['vehicle_id']}"),
+        InlineKeyboardButton(text="Уехал", callback_data=f"ov_left:{info['vehicle_id']}"),
+    ]])
+    for aid in settings.admin_ids:
+        try:
+            await bot.send_message(aid, text, reply_markup=kb)
+        except Exception as e:
+            logger.error(f"Ошибка уведомления о просрочке админу {aid}: {e}")
+
+
+@dp.callback_query(F.data.startswith("ov_stay:"))
+async def on_overstay_stay(callback: CallbackQuery):
+    if callback.from_user.id not in settings.admin_ids:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    vid = int(callback.data.split(":")[1])
+    async with async_session() as session:
+        try:
+            await mark_vehicle_overstay(session, vid, "stay")
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Уехал (закрыть долг)", callback_data=f"ov_left:{vid}")
+    ]])
+    await callback.message.edit_text(callback.message.text + "\n\nСтатус: Машина стоит — начисляется долг", reply_markup=kb)
+    await callback.answer("Отмечено: начисляется долг")
+
+
+@dp.callback_query(F.data.startswith("ov_left:"))
+async def on_overstay_left(callback: CallbackQuery):
+    if callback.from_user.id not in settings.admin_ids:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    vid = int(callback.data.split(":")[1])
+    async with async_session() as session:
+        try:
+            await mark_vehicle_overstay(session, vid, "left")
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+            return
+    await callback.message.edit_text(callback.message.text + "\n\nСтатус: Уехал (место освобождено)")
+    await callback.answer("Отмечено: уехал")

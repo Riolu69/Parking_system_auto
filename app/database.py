@@ -96,6 +96,9 @@ class Vehicle(Base):
     plate_number = Column(String(20), nullable=False)
     car_model = Column(String(100), nullable=True)
     valid_until = Column(DateTime, nullable=True)
+    spot_label = Column(String(50), nullable=True)
+    overstay_status = Column(String(20), default="none", nullable=False)
+    debt_since = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="vehicles")
@@ -163,6 +166,7 @@ DEFAULT_SETTINGS = {
     "max_spots": "200",
     "description_enabled": "0",
     "description_text": "",
+    "contract_text": "1. Общие положения\nНастоящий документ является публичной офертой и определяет порядок предоставления доступа на парковку и размещения транспортного средства (ТС) Пользователя на условиях выбранного тарифа.\n\n2. Предмет договора\nИсполнитель предоставляет Пользователю право проезда через шлагбаум (по номеру телефона) и размещения ТС на территории парковки в пределах оплаченного периода, а Пользователь обязуется оплатить услуги и соблюдать правила парковки.\n\n3. Порядок оформления и оплаты\nОформление заявки производится через сайт или Telegram-бота с указанием номера телефона и государственного регистрационного знака ТС. Доступ активируется после подтверждения оплаты.\n\n4. Права и обязанности сторон\nПользователю запрещается передавать доступ третьим лицам, блокировать проезд и нарушать правила внутреннего распорядка территории. При истечении оплаченного срока доступ может быть приостановлен автоматически.\n\n5. Персональные данные и реквизиты\nОтправляя данные при оформлении пропуска, Пользователь даёт согласие на их обработку для обеспечения работы сервиса и связи по вопросам обслуживания. Актуальные реквизиты получателя платежа отображаются на этапе оплаты.",
 }
 
 
@@ -183,6 +187,13 @@ async def init_db():
         v_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(vehicles)"))).fetchall()]
         if "valid_until" not in v_cols:
             await conn.execute(text("ALTER TABLE vehicles ADD COLUMN valid_until DATETIME"))
+        if "overstay_status" not in v_cols:
+            await conn.execute(text("ALTER TABLE vehicles ADD COLUMN overstay_status VARCHAR(20) DEFAULT 'none'"))
+        if "debt_since" not in v_cols:
+            await conn.execute(text("ALTER TABLE vehicles ADD COLUMN debt_since DATETIME"))
+        if "spot_label" not in v_cols:
+            await conn.execute(text("ALTER TABLE vehicles ADD COLUMN spot_label VARCHAR(50)"))
+            await conn.execute(text("UPDATE vehicles SET spot_label = (SELECT spot_label FROM rtu_slots WHERE rtu_slots.user_id = vehicles.user_id) WHERE spot_label IS NULL AND valid_until IS NOT NULL"))
         o_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(orders)"))).fetchall()]
         if "vehicle_id" not in o_cols:
             await conn.execute(text("ALTER TABLE orders ADD COLUMN vehicle_id INTEGER"))

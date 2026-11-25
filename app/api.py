@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import (
-    init_db, async_session, User, SmsQueue, Tariff, Order, PromoCode, RtuSlot, ExtraService, ServiceOrder
+    init_db, async_session, User, Vehicle, SmsQueue, Tariff, Order, PromoCode, RtuSlot, ExtraService, ServiceOrder
 )
 from app.services import (
     normalize_phone, normalize_plate, register_user_and_car, create_order, confirm_order, reject_order,
@@ -25,11 +25,11 @@ from app.services import (
     validate_promo_code, parse_tariff_ids, get_app_settings, set_app_settings,
     get_payment_settings, set_payment_settings, mark_order_paid_by_user,
     process_expired_slots, pop_expiring_slots, queue_open_gate, get_finance_stats,
-    set_user_spot, create_service_order, get_spots_availability
+    set_user_spot, set_vehicle_spot, pop_expired_vehicles_for_check, mark_vehicle_overstay, get_daily_tariff_price, calc_vehicle_debt, create_service_order, get_spots_availability
 )
 from app.bot import (
     bot, dp, notify_admins_order, notify_user_activated,
-    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users, notify_admins_support
+    notify_user_expiring, notify_admins_text, send_db_backup_to_admins, broadcast_to_users, notify_admins_support, notify_admins_expired_vehicle
 )
 
 logger = logging.getLogger("uvicorn")
@@ -58,6 +58,9 @@ async def scheduler_loop():
         try:
             async with async_session() as session:
                 expired_count = await process_expired_slots(session)
+                expired_vehs = await pop_expired_vehicles_for_check(session)
+                for ev in expired_vehs:
+                    await notify_admins_expired_vehicle(ev)
                 if expired_count:
                     logger.info(f"Автоудаление: {expired_count} просроченных ячеек.")
 
@@ -85,6 +88,11 @@ async def scheduler_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    async with async_session() as _s:
+        _cfg = await get_app_settings(_s)
+        _saved = (_cfg.get("bot_admin_ids") or "").strip()
+        if _saved:
+            settings.ADMIN_IDS = _saved
     bot_task = asyncio.create_task(run_bot())
     sched_task = asyncio.create_task(scheduler_loop())
     yield
@@ -158,6 +166,8 @@ class SettingsReq(BaseModel):
     max_spots: int = 200
     description_enabled: bool = False
     description_text: str = ""
+    contract_text: str = ""
+    bot_admin_ids: str | None = None
 
 
 class TariffCreateReq(BaseModel):
@@ -231,6 +241,11 @@ class IncomingSmsReq(BaseModel):
 
 @app.get("/")
 async def index():
+    return FileResponse("static/index.html")
+
+
+@app.get("/offer")
+async def offer_page():
     return FileResponse("static/index.html")
 
 
@@ -309,7 +324,13 @@ async def api_register(data: RegisterReq):
             full_name=data.full_name,
         )
         norm_pl = normalize_plate(data.plate_number)
-        matched_veh = next((v for v in user.vehicles if v.plate_number == norm_pl), user.vehicles[-1] if user.vehicles else None)
+        v_res = await session.execute(
+            select(Vehicle)
+            .where(Vehicle.user_id == user.id, Vehicle.plate_number == norm_pl)
+            .order_by(Vehicle.id.desc())
+            .limit(1)
+        )
+        matched_veh = v_res.scalar_one_or_none() or (user.vehicles[-1] if user.vehicles else None)
         try:
             order = await create_order(
                 session,
@@ -359,6 +380,7 @@ async def api_status(phone: str):
         )
         user = res.scalar_one_or_none()
         cfg = await get_app_settings(session)
+        daily_price = await get_daily_tariff_price(session)
         if not user:
             raise HTTPException(status_code=404, detail="Номер не найден")
         return {
@@ -367,8 +389,13 @@ async def api_status(phone: str):
             "gate_phone": cfg["gate_phone"],
             "vehicles": [
                 {
+                    "id": v.id,
                     "plate": v.plate_number,
                     "model": v.car_model,
+                    "spot": v.spot_label,
+                    "overstay_status": getattr(v, "overstay_status", "none"),
+                    "debt_days": calc_vehicle_debt(v, daily_price)[0],
+                    "debt_amount": calc_vehicle_debt(v, daily_price)[1],
                     "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None,
                 }
                 for v in user.vehicles
@@ -532,8 +559,42 @@ async def admin_set_settings(data: SettingsReq):
         payload = data.model_dump()
         payload["max_spots"] = max(0, int(payload.get("max_spots", 200)))
         payload["description_enabled"] = "1" if payload.get("description_enabled") else "0"
+        if payload.get("bot_admin_ids") is not None:
+            _ids = sorted(set(int(x.strip()) for x in str(payload["bot_admin_ids"]).replace(";", ",").replace(" ", ",").split(",") if x.strip().isdigit() and int(x.strip()) > 0))
+            _norm = ",".join(map(str, _ids))
+            payload["bot_admin_ids"] = _norm
+            settings.ADMIN_IDS = _norm
+        else:
+            payload.pop("bot_admin_ids", None)
         await set_app_settings(session, payload)
         return {"ok": True}
+
+
+class BotAdminsReq(BaseModel):
+    admin_ids: list[int]
+
+
+@app.get("/api/admin/bot-admins", dependencies=[Depends(verify_admin)])
+async def admin_get_bot_admins():
+    async with async_session() as session:
+        cfg = await get_app_settings(session)
+        saved = (cfg.get("bot_admin_ids") or "").strip()
+        if saved:
+            ids = [int(x.strip()) for x in saved.split(",") if x.strip().isdigit()]
+            settings.ADMIN_IDS = ",".join(map(str, ids))
+        else:
+            ids = list(settings.admin_ids)
+        return {"admin_ids": ids}
+
+
+@app.put("/api/admin/bot-admins", dependencies=[Depends(verify_admin)])
+async def admin_set_bot_admins(data: BotAdminsReq):
+    ids = sorted(set(int(x) for x in data.admin_ids if int(x) > 0))
+    val = ",".join(map(str, ids))
+    async with async_session() as session:
+        await set_app_settings(session, {"bot_admin_ids": val})
+    settings.ADMIN_IDS = val
+    return {"ok": True, "admin_ids": ids}
 
 
 @app.get("/api/admin/tariffs", dependencies=[Depends(verify_admin)])
@@ -663,6 +724,54 @@ async def admin_delete_promo(promo_id: int):
         return {"ok": True}
 
 
+
+
+@app.get("/api/admin/overstay", dependencies=[Depends(verify_admin)])
+async def admin_overstay_list():
+    async with async_session() as session:
+        daily_price = await get_daily_tariff_price(session)
+        res = await session.execute(
+            select(Vehicle)
+            .options(selectinload(Vehicle.user))
+            .where(Vehicle.overstay_status.in_(["check", "debt"]))
+            .order_by(Vehicle.debt_since.asc())
+        )
+        items = []
+        for v in res.scalars().all():
+            d_days, d_amt = calc_vehicle_debt(v, daily_price)
+            items.append({
+                "vehicle_id": v.id,
+                "phone": v.user.phone if v.user else "",
+                "plate": v.plate_number,
+                "spot": v.spot_label or "—",
+                "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else "—",
+                "status": v.overstay_status,
+                "debt_days": d_days,
+                "debt_amount": d_amt,
+            })
+        return items
+
+
+@app.post("/api/admin/overstay/{vehicle_id}/stay", dependencies=[Depends(verify_admin)])
+async def admin_overstay_stay(vehicle_id: int):
+    async with async_session() as session:
+        try:
+            await mark_vehicle_overstay(session, vehicle_id, "stay")
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    return {"ok": True}
+
+
+@app.post("/api/admin/overstay/{vehicle_id}/left", dependencies=[Depends(verify_admin)])
+async def admin_overstay_left(vehicle_id: int):
+    async with async_session() as session:
+        try:
+            await mark_vehicle_overstay(session, vehicle_id, "left")
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    return {"ok": True}
+
+
 @app.get("/api/admin/orders", dependencies=[Depends(verify_admin)])
 async def admin_orders():
     async with async_session() as session:
@@ -717,8 +826,10 @@ async def admin_users():
                 "id": u.id, "phone": u.phone, "full_name": u.full_name,
                 "vehicles": [
                     {
+                        "id": v.id,
                         "plate": v.plate_number,
                         "model": v.car_model,
+                        "spot": v.spot_label,
                         "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else None,
                     }
                     for v in u.vehicles
@@ -732,6 +843,16 @@ async def admin_users():
             }
             for u in users
         ]
+
+
+@app.put("/api/admin/vehicles/{vehicle_id}/spot", dependencies=[Depends(verify_admin)])
+async def admin_set_vehicle_spot(vehicle_id: int, data: SpotUpdateReq):
+    async with async_session() as session:
+        try:
+            v = await set_vehicle_spot(session, vehicle_id, data.spot)
+            return {"ok": True, "spot": v.spot_label}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.put("/api/admin/users/{user_id}/spot", dependencies=[Depends(verify_admin)])
@@ -752,6 +873,62 @@ async def admin_grant(data: GrantReq):
             return {"ok": True, "slot_number": slot.slot_number}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+class VehicleGrantReq(BaseModel):
+    days: int
+
+
+@app.post("/api/admin/vehicles/{vehicle_id}/grant", dependencies=[Depends(verify_admin)])
+async def admin_grant_vehicle(vehicle_id: int, data: VehicleGrantReq):
+    from datetime import datetime, timedelta
+    async with async_session() as session:
+        veh = await session.get(Vehicle, vehicle_id)
+        if not veh:
+            raise HTTPException(status_code=404, detail="Автомобиль не найден")
+        now = datetime.utcnow()
+        base = veh.valid_until if (veh.valid_until and veh.valid_until > now) else now
+        veh.valid_until = base + timedelta(days=data.days)
+        if hasattr(veh, "overstay_status"):
+            veh.overstay_status = None
+        await session.commit()
+        try:
+            slot = await grant_access_days(session, veh.user_id, data.days)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # Синхронизируем общий срок слота по максимальному сроку среди всех машин клиента
+        res = await session.execute(select(Vehicle).where(Vehicle.user_id == veh.user_id))
+        dates = [v.valid_until for v in res.scalars().all() if v.valid_until]
+        if dates and slot:
+            slot.valid_until = max(dates)
+            await session.commit()
+        return {"ok": True, "valid_until": veh.valid_until.strftime("%d.%m.%Y %H:%M")}
+
+
+@app.post("/api/admin/vehicles/{vehicle_id}/revoke", dependencies=[Depends(verify_admin)])
+async def admin_revoke_vehicle(vehicle_id: int):
+    from datetime import datetime
+    async with async_session() as session:
+        veh = await session.get(Vehicle, vehicle_id)
+        if not veh:
+            raise HTTPException(status_code=404, detail="Автомобиль не найден")
+        uid = veh.user_id
+        veh.valid_until = None
+        if hasattr(veh, "overstay_status"):
+            veh.overstay_status = None
+        await session.commit()
+        res = await session.execute(select(Vehicle).where(Vehicle.user_id == uid))
+        now = datetime.utcnow()
+        active_dates = [v.valid_until for v in res.scalars().all() if v.valid_until and v.valid_until > now]
+        if not active_dates:
+            await revoke_access(session, uid)
+        else:
+            slot_res = await session.execute(select(RtuSlot).where(RtuSlot.user_id == uid))
+            slot = slot_res.scalar_one_or_none()
+            if slot:
+                slot.valid_until = max(active_dates)
+                await session.commit()
+        return {"ok": True}
+
 
 
 @app.post("/api/admin/revoke", dependencies=[Depends(verify_admin)])

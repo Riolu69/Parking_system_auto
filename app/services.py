@@ -51,6 +51,7 @@ async def get_app_settings(session: AsyncSession) -> dict:
         "max_spots": max_spots,
         "description_enabled": data.get("description_enabled", "0") in ("1", "true", "True", True),
         "description_text": data.get("description_text", ""),
+        "contract_text": data.get("contract_text", ""),
     }
 
 
@@ -247,12 +248,24 @@ async def reject_order(session: AsyncSession, order_id: int) -> Order:
 
 
 async def _pick_next_free_spot(session: AsyncSession) -> str:
-    res = await session.execute(select(RtuSlot.spot_label).where(RtuSlot.spot_label != None, RtuSlot.status != "free"))
-    used = {str(r[0]).strip() for r in res.all() if r[0]}
+    now = datetime.now()
+    v_res = await session.execute(
+        select(Vehicle.spot_label).where(Vehicle.spot_label != None, Vehicle.valid_until != None, Vehicle.valid_until > now)
+    )
+    used = {str(r[0]).strip() for r in v_res.all() if r[0]}
     n = 1
     while str(n) in used:
         n += 1
     return str(n)
+
+
+async def set_vehicle_spot(session: AsyncSession, vehicle_id: int, spot_label: str) -> Vehicle:
+    v = await session.get(Vehicle, vehicle_id)
+    if not v:
+        raise ValueError("Автомобиль не найден")
+    v.spot_label = spot_label.strip() or None
+    await session.commit()
+    return v
 
 
 async def set_user_spot(session: AsyncSession, user_id: int, spot_label: str) -> RtuSlot:
@@ -286,13 +299,22 @@ async def create_service_order(session: AsyncSession, service_id: int, phone: st
 async def get_spots_availability(session: AsyncSession) -> dict:
     cfg = await get_app_settings(session)
     max_spots = cfg["max_spots"]
-    used = (await session.execute(
-        select(func.count(RtuSlot.slot_number)).where(RtuSlot.status != "free")
+    now = datetime.now()
+    active_veh_cnt = (await session.execute(
+        select(func.count(Vehicle.id)).where(Vehicle.valid_until != None, Vehicle.valid_until > now)
     )).scalar() or 0
-    free_spots = max(0, max_spots - int(used))
+    active_veh_users = select(Vehicle.user_id).where(Vehicle.valid_until != None, Vehicle.valid_until > now)
+    slots_without_veh = (await session.execute(
+        select(func.count(RtuSlot.slot_number)).where(
+            RtuSlot.status != "free",
+            (RtuSlot.user_id == None) | (~RtuSlot.user_id.in_(active_veh_users)),
+        )
+    )).scalar() or 0
+    used = int(active_veh_cnt) + int(slots_without_veh)
+    free_spots = max(0, max_spots - used)
     return {
         "max_spots": max_spots,
-        "used_spots": int(used),
+        "used_spots": used,
         "free_spots": free_spots,
     }
 
@@ -308,8 +330,6 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
     if slot:
         slot.valid_until = calc_valid_until(tariff, slot.valid_until)
         slot.notified_expiring = False
-        if not slot.spot_label:
-            slot.spot_label = await _pick_next_free_spot(session)
         if slot.status == "active":
             pass
         elif slot.status == "pending_add":
@@ -366,7 +386,6 @@ async def grant_access_by_tariff(session: AsyncSession, user_id: int, tariff: Ta
         slot.user_id = user.id
         slot.valid_until = calc_valid_until(tariff)
         slot.notified_expiring = False
-        slot.spot_label = await _pick_next_free_spot(session)
         slot.status = "pending_add"
         cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}#{user.phone}#"
         session.add(SmsQueue(slot_number=slot.slot_number, action="add", command_text=cmd))
@@ -390,7 +409,16 @@ async def confirm_order(session: AsyncSession, order_id: int) -> tuple[RtuSlot, 
     order.status = "paid"
     target_until = None
     if order.vehicle:
+        was_active = bool(order.vehicle.valid_until and order.vehicle.valid_until > datetime.now())
+        if not was_active:
+            avail = await get_spots_availability(session)
+            if avail["free_spots"] <= 0:
+                raise ValueError(f"Нет свободных парковочных мест (лимит: {avail['max_spots']})")
         order.vehicle.valid_until = calc_valid_until(order.tariff, order.vehicle.valid_until)
+        if not order.vehicle.spot_label:
+            order.vehicle.spot_label = await _pick_next_free_spot(session)
+        order.vehicle.overstay_status = "none"
+        order.vehicle.debt_since = None
         target_until = order.vehicle.valid_until
 
     slot = await grant_access_by_tariff(session, order.user_id, order.tariff)
@@ -466,7 +494,12 @@ async def process_expired_slots(session: AsyncSession) -> int:
         slot.status = "pending_del"
         cmd = f"{settings.RTU_PASSWORD}A{slot.slot_number:03d}##"
         session.add(SmsQueue(slot_number=slot.slot_number, action="delete", command_text=cmd))
-    if expired:
+    exp_vehs = (await session.execute(
+        select(Vehicle).where(Vehicle.spot_label != None, Vehicle.valid_until != None, Vehicle.valid_until <= now, Vehicle.overstay_status == 'none')
+    )).scalars().all()
+    for v in exp_vehs:
+        v.spot_label = None
+    if expired or exp_vehs:
         await session.commit()
     return len(expired)
 
@@ -523,3 +556,66 @@ async def report_sms_task(session: AsyncSession, task_id: int, status: str, erro
                 slot.spot_label = None
 
     await session.commit()
+
+
+async def get_daily_tariff_price(session: AsyncSession) -> int:
+    res = await session.execute(
+        select(Tariff).where(Tariff.is_active == True, Tariff.is_night == False, Tariff.days == 1).order_by(Tariff.id).limit(1)
+    )
+    t = res.scalar_one_or_none()
+    return int(t.price) if t and t.price > 0 else 300
+
+
+def calc_vehicle_debt(vehicle: Vehicle, daily_price: int) -> tuple[int, int]:
+    if getattr(vehicle, "overstay_status", "none") != "debt" or not vehicle.debt_since:
+        return 0, 0
+    import math
+    diff_sec = (datetime.now() - vehicle.debt_since).total_seconds()
+    days = max(1, math.ceil(max(1.0, diff_sec) / 86400.0))
+    return days, days * daily_price
+
+
+async def pop_expired_vehicles_for_check(session: AsyncSession) -> list[dict]:
+    now = datetime.now()
+    res = await session.execute(
+        select(Vehicle)
+        .options(selectinload(Vehicle.user))
+        .where(
+            Vehicle.valid_until != None,
+            Vehicle.valid_until <= now,
+            (Vehicle.overstay_status == None) | (Vehicle.overstay_status == "none"),
+        )
+    )
+    vehs = res.scalars().all()
+    items = []
+    for v in vehs:
+        v.overstay_status = "check"
+        v.debt_since = v.valid_until
+        items.append({
+            "vehicle_id": v.id,
+            "phone": v.user.phone if v.user else "",
+            "plate": v.plate_number,
+            "spot": v.spot_label or "",
+            "valid_until": v.valid_until.strftime("%d.%m.%Y %H:%M") if v.valid_until else "",
+        })
+    if vehs:
+        await session.commit()
+    return items
+
+
+async def mark_vehicle_overstay(session: AsyncSession, vehicle_id: int, action: str) -> Vehicle:
+    v = await session.get(Vehicle, vehicle_id)
+    if not v:
+        raise ValueError("Автомобиль не найден")
+    if action == "stay":
+        v.overstay_status = "debt"
+        if not v.debt_since:
+            v.debt_since = v.valid_until or datetime.now()
+    elif action == "left":
+        v.overstay_status = "none"
+        v.debt_since = None
+        v.spot_label = None
+    else:
+        raise ValueError("Неизвестное действие")
+    await session.commit()
+    return v
