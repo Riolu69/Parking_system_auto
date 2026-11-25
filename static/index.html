@@ -305,8 +305,10 @@
     }
     .modal-card.wide { max-width: 640px; max-height: 85vh; display: flex; flex-direction: column; }
     .contract-body {
-      overflow-y: auto; padding-right: 6px; font-size: 13px; line-height: 1.55;
-      color: var(--text); white-space: pre-line;
+      overflow-y: auto; overflow-x: hidden; padding-right: 8px;
+      font-size: 13.5px; line-height: 1.6; color: var(--text);
+      white-space: pre-line; overflow-wrap: anywhere; word-break: normal;
+      hyphens: auto; text-align: left;
     }
     .modal-card {
       background: var(--card); border: 1px solid var(--border); border-radius: 26px;
@@ -791,7 +793,8 @@
           <label class="agree-box" style="margin-top:6px;">
             <input id="reg-pd-agree" type="checkbox" />
             <span>
-              Я даю согласие на обработку персональных данных в соответствии с 152-ФЗ для оформления доступа к парковке.
+              Я даю согласие на обработку персональных данных в соответствии с 152-ФЗ и принимаю условия
+              <button type="button" class="agree-link" onclick="openPrivacyModal()">политики конфиденциальности</button>.
             </span>
           </label>
           <button class="btn btn-primary" onclick="registerAndPay()">Перейти к оплате</button>
@@ -947,15 +950,22 @@
               </label>
               <textarea id="set-desc-text" rows="4" placeholder="Преимущества нашей парковки" style="width:100%;resize:vertical;"></textarea>
             </div>
-            <div style="padding-top:14px;border-top:1px solid var(--border);">
+            <div style="padding-top:14px;border-top:1px solid var(--border);margin-bottom:14px;">
               <label for="set-contract-text" style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">Текст договора аренды / публичной оферты</label>
               <textarea id="set-contract-text" rows="7" placeholder="Текст оферты..." style="width:100%;resize:vertical;"></textarea>
+            </div>
+            <div style="padding-top:14px;border-top:1px solid var(--border);">
+              <label for="set-privacy-text" style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">Текст политики конфиденциальности</label>
+              <textarea id="set-privacy-text" rows="7" placeholder="Текст политики конфиденциальности..." style="width:100%;resize:vertical;"></textarea>
             </div>
           </div>
 
           <div style="margin-bottom:14px;">
-            <label for="set-bot-admin-ids" style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;">Администраторы бота (Telegram ID через запятую)</label>
-            <input id="set-bot-admin-ids" placeholder="Например: 123456789, 987654321" style="width:100%;" />
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <label style="margin:0;font-size:12px;color:var(--muted);">Администраторы бота (Telegram ID)</label>
+              <button type="button" class="adm-btn adm-btn-spot" onclick="addBotAdminCell('', true)">+ Добавить администратора</button>
+            </div>
+            <div id="bot-admin-cells" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;"></div>
           </div>
 
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
@@ -1208,6 +1218,32 @@
     }
 
 
+
+    function formatLegalText(raw) {
+      if (!raw) return "";
+      const norm = String(raw).replace(/\r\n?/g, "\n").trim();
+      return norm.split(/\n\s*\n/).map(para => {
+        const lines = para.split("\n").map(l => l.trim()).filter(Boolean);
+        if (!lines.length) return "";
+        const out = [];
+        for (const line of lines) {
+          const isListStart = /^(\d+\.\d*\.?|[•●▪\-–—*])\s+/.test(line);
+          if (!out.length || isListStart) {
+            out.push(line);
+          } else {
+            const prev = out[out.length - 1];
+            const prevEndsWithListPrefix = /^(\d+\.\d*\.?|[•●▪\-–—*])\s*$/.test(prev);
+            if (prevEndsWithListPrefix) {
+              out[out.length - 1] = prev + " " + line;
+            } else {
+              out[out.length - 1] = prev + " " + line;
+            }
+          }
+        }
+        return out.join("\n");
+      }).filter(Boolean).join("\n\n");
+    }
+
     async function loadFreeSpots() {
       const numEl = document.getElementById('free-spots-num');
       try {
@@ -1226,7 +1262,9 @@
         const descCard = document.getElementById('parking-desc-card');
         const descText = document.getElementById('parking-desc-text');
         const cEl = document.getElementById('contract-text');
-        if (cEl && (d.contract_text || '').trim()) cEl.textContent = d.contract_text;
+        if (cEl && (d.contract_text || '').trim()) cEl.textContent = formatLegalText(d.contract_text);
+        const pEl = document.getElementById('privacy-text');
+        if (pEl && (d.privacy_text || '').trim()) pEl.textContent = formatLegalText(d.privacy_text);
         if (descCard && descText) {
           if (d.description_enabled && (d.description_text || '').trim()) {
             descText.textContent = d.description_text;
@@ -1544,7 +1582,7 @@
 
       const cfg = await cfgRes.json();
       document.getElementById('set-sbp-phone').value = cfg.sbp_phone;
-      if (document.getElementById('set-bot-admin-ids')) { document.getElementById('set-bot-admin-ids').value = (cfg.bot_admin_ids || (cfg.admin_ids || []).join(', ') || ''); }
+      renderBotAdminCells(cfg.bot_admin_ids ?? cfg.admin_ids ?? '');
       document.getElementById('set-sbp-bank').value = cfg.sbp_bank;
       document.getElementById('set-sbp-rec').value = cfg.sbp_recipient;
       document.getElementById('set-gate-phone').value = cfg.gate_phone;
@@ -1552,7 +1590,10 @@
       document.getElementById('set-max-spots').value = cfg.max_spots ?? 200;
       document.getElementById('set-desc-enabled').checked = !!cfg.description_enabled;
       document.getElementById('set-desc-text').value = cfg.description_text || '';
-      document.getElementById('set-contract-text').value = cfg.contract_text || document.getElementById('contract-text').textContent;
+      document.getElementById('set-contract-text').value = cfg.contract_text ?? '';
+      if (document.getElementById('set-privacy-text')) {
+        document.getElementById('set-privacy-text').value = cfg.privacy_text ?? '';
+      }
       renderQrs(cfg.bot_username);
 
       const orders = await oRes.json();
@@ -1688,13 +1729,65 @@
       setTimeout(() => m.textContent = '', 3000);
     }
 
+
+    function addBotAdminCell(val = '', focusNew = false) {
+      const box = document.getElementById('bot-admin-cells');
+      if (!box) return;
+      const cell = document.createElement('div');
+      cell.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:14px;background:var(--card-elev);border:1px solid var(--border);';
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.inputMode = 'numeric';
+      inp.className = 'bot-admin-cell-inp';
+      inp.placeholder = 'Telegram ID';
+      inp.value = String(val || '').replace(/\D/g, '');
+      inp.style.cssText = 'flex:1;min-width:0;padding:6px 8px;border-radius:10px;background:var(--card);border:1px solid var(--border);font-variant-numeric:tabular-nums;';
+      inp.oninput = () => { inp.value = inp.value.replace(/\D/g, ''); };
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'adm-btn adm-btn-del';
+      del.style.marginLeft = '0';
+      del.title = 'Удалить';
+      del.textContent = '×';
+      del.onclick = () => {
+        cell.remove();
+        if (!box.children.length) addBotAdminCell('', false);
+      };
+      cell.appendChild(inp);
+      cell.appendChild(del);
+      box.appendChild(cell);
+      if (focusNew) inp.focus();
+    }
+
+    function renderBotAdminCells(rawIds) {
+      const box = document.getElementById('bot-admin-cells');
+      if (!box) return;
+      box.innerHTML = '';
+      const list = Array.isArray(rawIds)
+        ? rawIds.map(String)
+        : String(rawIds || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+      if (!list.length) {
+        addBotAdminCell('', false);
+      } else {
+        list.forEach(id => addBotAdminCell(id, false));
+      }
+    }
+
+    function collectBotAdminIds() {
+      return Array.from(document.querySelectorAll('.bot-admin-cell-inp'))
+        .map(el => el.value.replace(/\D/g, '').trim())
+        .filter(Boolean)
+        .join(',');
+    }
+
     async function saveSettings() {
-      await fetch('/api/admin/settings', {
+      const m = document.getElementById('pay-set-msg');
+      const r = await fetch('/api/admin/settings', {
         method: 'PUT',
         headers: {'Content-Type': 'application/json', 'X-Admin-Password': getAdminPass()},
         body: JSON.stringify({
           sbp_phone: document.getElementById('set-sbp-phone').value,
-          bot_admin_ids: (document.getElementById('set-bot-admin-ids')?.value ?? null),
+          bot_admin_ids: collectBotAdminIds(),
           sbp_bank: document.getElementById('set-sbp-bank').value,
           sbp_recipient: document.getElementById('set-sbp-rec').value,
           gate_phone: document.getElementById('set-gate-phone').value,
@@ -1703,13 +1796,20 @@
           description_enabled: document.getElementById('set-desc-enabled').checked,
           description_text: document.getElementById('set-desc-text').value,
           contract_text: document.getElementById('set-contract-text').value,
+          privacy_text: document.getElementById('set-privacy-text')?.value ?? '',
         }),
       });
-      const m = document.getElementById('pay-set-msg');
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        m.textContent = err.detail || 'Ошибка сохранения настроек';
+        m.className = 'msg err';
+        return;
+      }
       m.textContent = 'Настройки сохранены';
+      m.className = 'msg ok';
       setTimeout(() => m.textContent = '', 2000);
-      loadAdmin();
-      loadFreeSpots();
+      await loadAdmin();
+      await loadFreeSpots();
 
     function syncSbpFieldsVisibility() {
       const sel = document.getElementById('pay-provider');
@@ -2537,6 +2637,19 @@
       closeContractModal();
     }
 
+
+    function openPrivacyModal() {
+      const modal = document.getElementById('privacy-modal');
+      const bodyEl = document.getElementById('privacy-text');
+      if (bodyEl) bodyEl.scrollTop = 0;
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closePrivacyModal() {
+      const modal = document.getElementById('privacy-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
     function toggleExtraDocSettings() {
       const box = document.getElementById('extra-doc-settings');
       if (box) box.classList.toggle('hidden');
@@ -2591,6 +2704,26 @@
     </div>
   </div>
 
+
+  <div id="privacy-modal" class="modal-bg hidden" onclick="if(event.target===this) closePrivacyModal()">
+    <div class="modal-card wide">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:nowrap;gap:12px;">
+        <h2>Политика конфиденциальности</h2>
+        <button type="button" class="adm-btn adm-btn-del" style="margin-left:auto;flex-shrink:0;" title="Закрыть" onclick="closePrivacyModal()">×</button>
+      </div>
+      <div class="contract-body" id="privacy-text">1. Общие положения
+Настоящая Политика конфиденциальности определяет порядок обработки и защиты персональных данных пользователей сервиса парковки в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».
+
+2. Состав обрабатываемых данных
+При оформлении пропуска и обращении в поддержку могут обрабатываться номер телефона, государственный регистрационный знак транспортного средства, марка/модель автомобиля, данные Telegram-аккаунта и сведения об оплатах.
+
+3. Цели и порядок обработки
+Данные используются исключительно для предоставления доступа через шлагбаум, учёта парковочных мест и заявок, информирования пользователя и связи по вопросам работы парковки.</div>
+      <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-sm btn-secondary" onclick="closePrivacyModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
 

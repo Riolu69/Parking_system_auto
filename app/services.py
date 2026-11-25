@@ -52,6 +52,8 @@ async def get_app_settings(session: AsyncSession) -> dict:
         "description_enabled": data.get("description_enabled", "0") in ("1", "true", "True", True),
         "description_text": data.get("description_text", ""),
         "contract_text": data.get("contract_text", ""),
+        "privacy_text": data.get("privacy_text", ""),
+        "bot_admin_ids": data.get("bot_admin_ids", settings.ADMIN_TELEGRAM_IDS),
     }
 
 

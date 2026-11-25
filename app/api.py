@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
         _cfg = await get_app_settings(_s)
         _saved = (_cfg.get("bot_admin_ids") or "").strip()
         if _saved:
-            settings.ADMIN_IDS = _saved
+            settings.ADMIN_TELEGRAM_IDS = _saved
     bot_task = asyncio.create_task(run_bot())
     sched_task = asyncio.create_task(scheduler_loop())
     yield
@@ -167,6 +167,7 @@ class SettingsReq(BaseModel):
     description_enabled: bool = False
     description_text: str = ""
     contract_text: str = ""
+    privacy_text: str = ""
     bot_admin_ids: str | None = None
 
 
@@ -563,7 +564,7 @@ async def admin_set_settings(data: SettingsReq):
             _ids = sorted(set(int(x.strip()) for x in str(payload["bot_admin_ids"]).replace(";", ",").replace(" ", ",").split(",") if x.strip().isdigit() and int(x.strip()) > 0))
             _norm = ",".join(map(str, _ids))
             payload["bot_admin_ids"] = _norm
-            settings.ADMIN_IDS = _norm
+            settings.ADMIN_TELEGRAM_IDS = _norm
         else:
             payload.pop("bot_admin_ids", None)
         await set_app_settings(session, payload)
@@ -581,7 +582,7 @@ async def admin_get_bot_admins():
         saved = (cfg.get("bot_admin_ids") or "").strip()
         if saved:
             ids = [int(x.strip()) for x in saved.split(",") if x.strip().isdigit()]
-            settings.ADMIN_IDS = ",".join(map(str, ids))
+            settings.ADMIN_TELEGRAM_IDS = ",".join(map(str, ids))
         else:
             ids = list(settings.admin_ids)
         return {"admin_ids": ids}
@@ -593,7 +594,7 @@ async def admin_set_bot_admins(data: BotAdminsReq):
     val = ",".join(map(str, ids))
     async with async_session() as session:
         await set_app_settings(session, {"bot_admin_ids": val})
-    settings.ADMIN_IDS = val
+    settings.ADMIN_TELEGRAM_IDS = val
     return {"ok": True, "admin_ids": ids}
 
 
